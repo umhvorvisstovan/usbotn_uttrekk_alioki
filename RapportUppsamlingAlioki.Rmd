@@ -1,0 +1,1543 @@
+---
+title: "Uppsamling fyri aliøki `r params$alioki`"
+author: "Vernd - Umhvørvisstovan"
+date: "`r format(Sys.time(), '%d-%B-%Y')`"
+output:
+  bookdown::pdf_document2:
+    toc: true
+    number_sections: true
+    fig_caption: true
+  bookdown::html_document2:
+    df_print: paged
+    toc: true
+    toc_float: true
+    toc_depth: 1
+    number_sections: true
+always_allow_html: yes
+params:
+  alioki:
+    input: text
+    label: Aliøki
+    value: A71
+  loyniord:
+    input: password
+    label: Loyniorð til usbotn
+    value: ''
+  user:
+    input: text
+    label: Brúkaranavn til usbotn
+    value: ''
+  database:
+    input: text
+    label: Navn á dátugrunni
+    value: ''
+  server:
+    input: text
+    label: Navn á servara
+    value: ''
+  kemi:
+    value: 2014
+  lev:
+    value: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      warning = FALSE,
+                      message = FALSE,
+                      fig.align = 'center',
+                      fig.pos = 'ht',
+                      dev = "png"
+)
+
+```
+
+
+```{r packages, include=FALSE}
+library(tidyverse)
+library(lubridate)
+library(shiny)
+library(odbc)
+library(knitr)
+library(kableExtra)
+library(ggforce)
+
+#"`r title`"
+alioki <- params$alioki
+#hvussu nógvar kanningar ár skulu vísast?
+lev <- params$lev
+utsetur <- params$lev
+kemi <- params$kemi
+
+#dybcolour <- "#87CEEB"
+dybcolour <- "#93d8f5"
+
+#lat og lng minimums
+latmin <- 0.01
+lngmin <- 0.025
+latmax <- 0.02
+
+options(kableExtra.html.bsTable = T)
+
+if (is_html_output() == TRUE){
+  options(knitr.table.format = "html")
+  knitr::opts_chunk$set(out.width = "600px",
+                        dpi = 150)
+  
+} else {
+  options(knitr.table.format = "latex")
+  knitr::opts_chunk$set(dpi = 300)
+}
+
+
+```
+
+
+```{r constants, include=FALSE}
+# hetta er connection til usbotn dátugrunnin
+# hjálpari til skript menning, set developing til TRUE 
+developing <- FALSE
+
+if(developing == TRUE){
+  con <- dbConnect(odbc::odbc(), Driver = "PostgreSQL Unicode(x64)", 
+                   server = rstudioapi::showPrompt(title = "Server", message = "Server navn:", default = ""),
+                   database = rstudioapi::showPrompt(title = "Database", message = "Database navn:", default = ""),
+                   UID = rstudioapi::showPrompt("Database username", "username"),
+                   PWD = rstudioapi::askForPassword("Database password"),
+                   Port = 5432,
+                   encoding = "windows-1252")
+  alioki <- "A11"
+  lev <- 3
+  utsetur <- 3
+  kemi <- 2014
+} else {
+  con <- dbConnect(odbc::odbc(), Driver = "PostgreSQL Unicode(x64)", 
+                   Server = params$server,
+                   Database = params$database,
+                   UID = params$user,
+                   PWD = params$loyniord,
+                   Port = 5432,
+                   encoding = "windows-1252")
+}
+
+#litir til stødu 1 til 4 av sensorisku kanningunum
+s1 <- "#418CFC"
+s2 <- "#4F820D"
+s3 <- "#FFD308"
+s4 <- "#D63118"
+#litur til NA, tvs. har ikki nokk av dátum eru til eina útrokning, ella einki data er registrera
+na_litur <- "grey"
+#navnið sum NA skal hava í plottum
+na_navn <- "vantandi dátur"
+StodaColourHex <- c(s1, s2, s3, s4, na_litur)
+stodafac <- c("1", "2", "3", "4")
+StodLabel <- c("1 - Ódálkað", "2 - Nakað dálkað", "3 - Dálkað", "4 - Illa dálkað", na_navn)
+
+#litir til kemi kanningarnar
+MarkColoursHex <- c(s1, s3, s4)
+#Cu and LOI limit values
+CuLOImarkv <- c(0, 170, 270, Inf)
+CuLOIlabels <- c("< 170", "170 - 270", "> 270")
+#Zn limit values
+Znmarkv <- c(0, 270, 410, Inf)
+Znlabels <- c("< 270", "270 - 410", "> 410")
+#nøvn á kemisku støðunum
+marklabels <- c("< Ávaringarvirði", "> Ávaringarvirði", "> Markvirði")
+marklabels_no <- c("1", "3", "4")
+#dataframe við markvirðum pr evni
+kemi3 <- c("CU", "ZN", "LOI")
+kemilabels <- c("Kopar (Cu)", "Sink (Zn)", "Gløðitap (LOI)")
+dfMark <- data.frame(evni = kemi3,
+                     avaring = c(170, 270, 170),
+                     markvirdi = c(270, 410, 270))
+dfMark <- dfMark %>% mutate(evni = factor(evni, levels = kemi3, labels = kemilabels))
+dfMark1 <- dfMark %>% gather(key = "mark", value = "virdi_conv", -evni)
+
+#ja og nei litir til fódur/skarn
+jalit <- s4
+neilit <- s2
+
+#tey ymisku sýnisløgini og nøvn teirra
+synisslag <- c("SS", "FS", "OS", "BS", "MS", "RS", "OO")
+synisnavn <- c("Samanberingarsýni", "Fjarasýni", "Økissýni", "Blandsýni?", "Millumsýni", "Ringsýni", "Ókent")
+
+```
+
+
+```{r include=FALSE}
+#kemisku úrslitini frá usbotn
+urslitkemi <- tbl(con, "midal3kemi") %>% 
+  select(-rap_id, -stodslag_id, -alieind) %>% 
+  left_join(tbl(con, "botnsyni"), by = c("botn_id")) %>% 
+  left_join(tbl(con, "kanningarrapport"), by = "rap_id") %>%
+  #um lng og lat ikki eru upplýst, so verður ætlaða knatstøðin nýtt
+  mutate(lng = if_else(is.na(lng), plan_lng, lng),
+         lat = if_else(is.na(lat), plan_lat, lat)) %>% 
+  #filtrerað aliøki til tað valda
+  filter(alioki_id == alioki) %>% 
+  select(alioki_id, rap_id, utgava_slag, utgava_dato, synistoka, alieind, alieindir, stodslag_id, 
+         botn_id, stodnr, synistoku_dato, lng, lat, evni, virdi, eind, rnk, syni_stodakemi, midal, 
+         eind_stodakemi, evni_stodakemi, stodakemi) %>% 
+  collect()
+#datawrangling av kemisku úrslitunum
+urslitkemi <- urslitkemi %>% 
+  mutate(lng = abs(lng)*-1) %>% 
+  group_by(rap_id) %>% 
+  mutate(synisdato = max(synistoku_dato)) %>% 
+  ungroup() %>% 
+  mutate(year = lubridate::year(synistoku_dato)) %>% 
+  mutate(kanning = paste(synisdato, ifelse(utgava_slag == "ALIAU", "*", ""))) %>%
+  mutate(kanningmy = paste(format(synisdato, "%b-%Y"), ifelse(utgava_slag == "ALIAU", "*", ""))) %>%
+  mutate(kanningy = paste(year, ifelse(utgava_slag == "ALIAU", "*", ""))) %>% 
+  mutate(syni_stodakemi =factor(syni_stodakemi, levels = marklabels_no),
+         eind_stodakemi =factor(eind_stodakemi, levels = marklabels_no),
+         evni_stodakemi =factor(evni_stodakemi, levels = marklabels_no),
+         stodakemi =factor(stodakemi, levels = marklabels_no)
+  )
+
+kemimean <- urslitkemi %>% 
+  filter(!is.na(midal)) %>% 
+  mutate(evnital = if_else(evni == "CU", 2, if_else(evni == "ZN", 1, if_else(evni == "LOI", 0, NA_real_))))
+
+
+#heinta urslitbotnlysing
+urslitbotnl <- tbl(con, "urslitbotnlysing") %>% 
+  left_join(tbl(con, "botnsyni"), by = "botn_id") %>% 
+  left_join(tbl(con, "kanningarrapport"), by = "rap_id") %>% 
+  mutate(lng = if_else(is.na(lng), plan_lng, lng),
+         lat = if_else(is.na(lat), plan_lat, lat)) %>%
+  filter(alioki_id == alioki) %>% 
+  collect()
+urslitbotnl <- urslitbotnl %>% 
+  mutate(year = lubridate::year(synistoku_dato)) %>% 
+  mutate(lng = abs(lng)*-1) %>% 
+  group_by(rap_id) %>% 
+  mutate(synisdato = max(synistoku_dato)) %>% 
+  ungroup() %>% 
+  mutate(kanning = paste(synisdato, ifelse(utgava_slag == "ALIAU", "*", ""))) %>%
+  mutate(kanningy = paste(year, ifelse(utgava_slag == "ALIAU", "*", ""))) %>%
+  arrange(synistoku_dato)
+
+#heinta sensorisk úrslit frá databasanum
+urslitsens <- tbl(con, "midalsens") %>% 
+  select(-rap_id, -stodslag_id, -alieind) %>% 
+  left_join(tbl(con, "botnsyni"), by = "botn_id") %>% 
+  left_join(tbl(con, "kanningarrapport"), by = "rap_id") %>% 
+  mutate(lng = if_else(is.na(lng), plan_lng, lng),
+         lat = if_else(is.na(lat), plan_lat, lat)) %>%  
+  filter(alioki_id == alioki) %>% 
+  collect()
+
+#heinta aliford_nr fyri betri at kunna gera kort
+alifjord_info <- tbl(con, "alioki") %>% 
+  left_join(tbl(con, "alifjord"), by = "alifjord_nr") %>% 
+  filter(alioki_nr == alioki) %>%
+  select(alifjord_nr, alifjord_navn) %>% 
+  collect()
+alifjord_nrr <- alifjord_info$alifjord_nr
+alifjord_navn <- alifjord_info$alifjord_navn
+
+#heinta øll ringsýni á alifjørðinum, fyri at síggja hvar ringar hava ligið
+ringpos <- tbl(con, "alioki") %>% 
+  filter(alifjord_nr == alifjord_nrr) %>% 
+  left_join(tbl(con, "kanningarrapport"), by = c("alioki_nr" = "alioki_id")) %>%
+  left_join(tbl(con, "botnsyni"), by = "rap_id") %>% 
+  mutate(lng = if_else(is.na(lng), plan_lng, lng),
+         lat = if_else(is.na(lat), plan_lat, lat)) %>%
+  collect()
+ringpos <- ringpos %>% 
+  mutate(year = lubridate::year(synistoku_dato))
+
+
+#heinta sensorisku úrslitini
+urslitsens1 <- urslitsens %>% 
+  mutate(lng = abs(lng)*-1) %>% 
+  mutate(year = lubridate::year(synistoku_dato)) %>% 
+  group_by(rap_id) %>% 
+  mutate(synisdato = max(synistoku_dato)) %>% 
+  ungroup() %>% 
+  mutate(kanning = paste(synisdato, ifelse(utgava_slag == "ALIAU", "*", ""))) %>%
+  mutate(kanningmy = paste(format(synisdato, "%b-%Y"), ifelse(utgava_slag == "ALIAU", "*", ""))) %>%
+  mutate(kanningy = paste(year, ifelse(utgava_slag == "ALIAU", "*", ""))) %>% 
+  mutate(stoda_iiogiii_stig_new =factor(stoda_iiogiii_stig_new, levels = stodafac),
+         stoda_iiogiii_stig_new= fct_explicit_na(stoda_iiogiii_stig_new, na_navn),
+         midalstoda_iiogiii_stig =factor(midalstoda_iiogiii_stig, levels = stodafac),
+         midalstoda_iiogiii_stig= fct_explicit_na(midalstoda_iiogiii_stig, na_navn),
+         stodasens_stig =factor(stodasens_stig, levels = stodafac),
+         stodasens_stig= fct_explicit_na(stodasens_stig, na_navn),
+  )
+
+sensutgava_syni <- urslitsens1 %>% 
+  #filter(year >= min(alarautseta$year)) %>%
+  group_by(utgava_dato, synistoku_dato) %>% 
+  summarise(n = n())
+
+sensmean <- urslitsens1 %>%
+  distinct(utgava_dato, stodslag_id, alieind, stodasens_stig)
+sensmean <- sensmean %>% 
+  left_join(sensutgava_syni)
+
+#heinta einfaldu djóralívskanningarnar
+urslitdjoreinkul <- tbl(con, "urslitdjortald") %>% 
+  left_join(tbl(con, "djornogd") %>% select(-deprecated, -deprecated_date), by = "djornogd_id") %>%
+  left_join(tbl(con, "botndjor") %>% select(-deprecated, -deprecated_date), by = "botndjor_id") %>% 
+  left_join(tbl(con, "botnsyni"), by = "botn_id") %>% 
+  left_join(tbl(con, "kanningarrapport"), by = "rap_id") %>% 
+  mutate(lng = if_else(is.na(lng), plan_lng, lng),
+         lat = if_else(is.na(lat), plan_lat, lat)) %>%
+  filter(alioki_id == alioki) %>% 
+  collect()
+urslitdjoreinkul <- urslitdjoreinkul %>% 
+  mutate(year = lubridate::year(synistoku_dato)) %>% 
+  mutate(lng = abs(lng)*-1) %>% 
+  group_by(rap_id) %>% 
+  mutate(synisdato = max(synistoku_dato)) %>% 
+  ungroup() %>% 
+  mutate(kanning = paste(synisdato, ifelse(utgava_slag == "ALIAU", "*", ""))) %>%
+  mutate(kanningy = paste(year, ifelse(utgava_slag == "ALIAU", "*", ""))) %>%
+  arrange(synistoku_dato)
+
+#heinta djóralívskanningarnar
+urslitdjoraliv <- tbl(con, "urslitdjoraliv") %>% 
+  left_join(tbl(con, "djorslag"), by = "aphia_id") %>%
+  left_join(tbl(con, "taxonrank"), by = "rank_id") %>%
+  left_join(tbl(con, "djoralivsyni"), by = "djorliv_id") %>% 
+  left_join(tbl(con, "botnsyni"), by = "botn_id") %>% 
+  left_join(tbl(con, "kanningarrapport"), by = "rap_id") %>% 
+  mutate(lat = if_else(is.na(lat.y), plan_lat, lat.y),
+         lat = if_else(is.na(lat.x), lat, lat.x),
+         lng = if_else(is.na(lng.y), plan_lng, lng.y),
+         lng = if_else(is.na(lng.x), lng, lng.y),
+         lng = abs(lng)*-1) %>%
+  select(-lat.y, -plan_lat, -lat.x, -lng.y, -plan_lng, -lng.x) %>% 
+  filter(alioki_id == alioki) %>% 
+  collect()
+urslitdjoraliv <- urslitdjoraliv %>% 
+  mutate(year = lubridate::year(synistoku_dato)) %>% 
+  mutate(lng = abs(lng)*-1) %>% 
+  group_by(rap_id) %>% 
+  mutate(synisdato = max(synistoku_dato)) %>% 
+  ungroup() %>% 
+  mutate(kanning = paste(synisdato, ifelse(utgava_slag == "ALIAU", "*", ""))) %>%
+  mutate(kanningy = paste(year, ifelse(utgava_slag == "ALIAU", "*", ""))) %>%
+  arrange(synistoku_dato)
+
+
+#heinta tøl úr aliskipan talvuni
+#hetta skal liggja í databasanum í framtíðini!!!
+filename <- paste("data/UrAliskipan/", alioki, ".xlsx", sep = "")
+filenameforsogn <- paste("data/UrAliskipan/", alioki, "forsogn.xlsx", sep = "")
+
+library(readxl)
+
+#innles rakstrartøl
+rakstrartol <- read_excel(filename, 
+                          col_types = c("date", "numeric", "numeric", 
+                                        "numeric", "numeric", "numeric", 
+                                        "numeric", "numeric", "numeric", 
+                                        "numeric", "numeric", "numeric", 
+                                        "numeric", "numeric", "numeric", 
+                                        "numeric", "numeric", "numeric", 
+                                        "numeric", "numeric"))
+
+rakstrartol <- rakstrartol %>% 
+  rename(ali_date = 'Mánaður',
+         tal_stk = 'Tal (stk)',
+         biomassi_ultimo_kg = 'Biomassi ultimo (kg)',
+         fodur_kg = "Fóður (kg)",
+         fodurfaktor = 'Fóðurfaktor',
+         felli_stk = 'Felli (stk)',
+         felli_kg = 'Felli (kg)',
+         utsett_stk = 'Útsett (stk)',
+         utsett_kg = 'Útsett (kg)',
+         slatur_stk = 'Slátur (stk)',
+         slatur_kg = 'Slátur (kg)',
+         sloppid_stk = 'Sloppið (stk)',
+         sloppid_kg = 'Sloppið (kg)',
+         flutt_ur_stk = 'Flutt úr (stk)',
+         flutt_ur_kg = 'Flutt úr (kg)',
+         flutt_i_stk = 'Flutt í (stk)',
+         flutt_i_kg = 'Flutt í (kg)',
+         biomassi_primo_kg = 'Biomassi primo (kg)',
+         biomassi_vokstur_kg = 'Biomassa vøkstur (kg)',
+         fulfiggja_tol = 'Fullfíggja tøl') %>% 
+  mutate(alioki_id = alioki,
+         tol = "Rakstur")
+
+#innless forsøgn tøl
+filenameforsogn <- paste("data/UrAliskipan/", alioki, "forsogn.xlsx", sep = "")
+
+if(file.exists(filenameforsogn)) {
+  forsogn <- read_excel(filenameforsogn, 
+                        col_types = c("date", "numeric", "numeric", 
+                                      "numeric", "numeric", "numeric", 
+                                      "numeric", "numeric", "numeric", 
+                                      "numeric", "numeric", "numeric", 
+                                      "numeric", "numeric", "numeric", 
+                                      "numeric", "numeric", "numeric", 
+                                      "numeric", "numeric"))
+  
+  forsogn <- forsogn %>% 
+    rename(ali_date = 'Mánaður',
+           tal_stk = 'Tal (stk)',
+           biomassi_ultimo_kg = 'Biomassi ultimo (kg)',
+           fodur_kg = "Fóður (kg)",
+           fodurfaktor = 'Fóðurfaktor',
+           felli_stk = 'Felli (stk)',
+           felli_kg = 'Felli (kg)',
+           utsett_stk = 'Útsett (stk)',
+           utsett_kg = 'Útsett (kg)',
+           slatur_stk = 'Slátur (stk)',
+           slatur_kg = 'Slátur (kg)',
+           sloppid_stk = 'Sloppið (stk)',
+           sloppid_kg = 'Sloppið (kg)',
+           flutt_ur_stk = 'Flutt úr (stk)',
+           flutt_ur_kg = 'Flutt úr (kg)',
+           flutt_i_stk = 'Flutt í (stk)',
+           flutt_i_kg = 'Flutt í (kg)',
+           biomassi_primo_kg = 'Biomassi primo (kg)',
+           biomassi_vokstur_kg = 'Biomassa vøkstur (kg)',
+           fulfiggja_tol = 'Fullfíggja tøl') %>% 
+    mutate(alioki_id = alioki,
+           tol = "Forsøgn")
+  
+  aliskipan <- rbind(rakstrartol, forsogn)
+  aliskipan <- aliskipan %>% mutate(tol = factor(tol, levels = c("Rakstur", "Forsøgn")))
+  if(sum(duplicated(aliskipan$ali_date))>0) {
+    yvirlapp <- TRUE
+  } else {
+    yvirlapp <- FALSE
+  }
+  #um rakstur og forsøgn yvirlappa, so verða duplicat rakstrar tøl sletta
+  aliskipan <- aliskipan %>% arrange(tol) %>%  group_by(ali_date) %>% filter(!duplicated(ali_date)) %>% ungroup()
+  enddate <- max(as.Date(forsogn$ali_date))
+  lev <- lev + 1
+} else {
+  aliskipan <- rakstrartol
+  enddate <- Sys.Date()
+  yvirlapp <- FALSE
+}
+
+alara <- aliskipan %>% 
+  mutate(ali_date = as.Date(ali_date)) %>% 
+  complete(ali_date = seq.Date(min(ali_date) %m-% months(1), enddate, by = "month")) %>% 
+  arrange(ali_date) %>% 
+  fill(tol) %>% 
+  mutate(biomassi_ultimo_kg = if_else(is.na(biomassi_ultimo_kg), 0, biomassi_ultimo_kg))%>%
+  mutate(biomassi_vokstur_kg = if_else(is.na(biomassi_vokstur_kg), 0, biomassi_vokstur_kg))%>%
+  mutate(fodur_kg = if_else(is.na(fodur_kg), 0, fodur_kg))%>%
+  mutate(year = lubridate::year(ali_date))
+
+#finna nær ein útseta er byrja
+alarautseta <- alara %>% 
+  filter(biomassi_ultimo_kg == 0 & fodur_kg == 0) %>% 
+  arrange(ali_date) %>% 
+  mutate(ali_date = (ali_date) %m+% months(1))
+
+alarautseta <- alara %>% 
+  filter(ali_date %in% alarautseta$ali_date) %>% 
+  filter(!biomassi_ultimo_kg == 0) %>% 
+  filter(!(utsett_stk ==0 & flutt_i_stk == 0))
+
+alara1 <- alara %>% 
+  arrange(ali_date) %>% 
+  mutate(utseta = cut(ali_date, breaks = c(alarautseta$ali_date, Inf))) %>% 
+  group_by(utseta) %>% 
+  mutate(sumfodur = cumsum(fodur_kg),
+         sumfodur = if_else(fodur_kg == 0, 0, sumfodur),
+         sumfodur90 = max(sumfodur)*0.9,
+         sumvoksturbio = cumsum(biomassi_vokstur_kg),
+         sumvoksturbio = if_else(biomassi_vokstur_kg <= 0, 0, sumvoksturbio),
+         maxbio = max(biomassi_ultimo_kg),
+         maxtal = max(tal_stk),
+         totalfodur = max(max(sumfodur)),
+         flutt_utsett_stk = ifelse(flutt_i_stk == 0, NA_real_, flutt_i_stk-flutt_ur_stk),
+         flutt_utsett_kg = ifelse(flutt_i_kg == 0, NA_real_, flutt_i_kg-flutt_ur_kg),
+         stodd_flutt = ifelse(flutt_utsett_stk <= 0, NA_real_, flutt_utsett_kg/flutt_utsett_stk),
+         stodd_utsett = ifelse(utsett_stk == 0, NA_real_, utsett_kg/utsett_stk),
+         stodd_tikid = ifelse(slatur_stk == 0, NA_real_, slatur_kg/slatur_stk),) %>% 
+  filter(!is.na(tol))
+
+#hetta er ógvuliga tollut!! skuldi bara filtrera forsøgnartølini út tá summar verða útroknaðir
+#høvdið riggaði ikki meira nú kl 22:24 :)
+alara2 <- alara %>% 
+  arrange(ali_date) %>% 
+  mutate(utseta = cut(ali_date, breaks = c(alarautseta$ali_date, Inf))) %>%
+  ##hetta filtri er tað sum er lagt afturat
+  filter(if(yvirlapp==TRUE) tol == "Rakstur" else tol !="einki") %>%
+  group_by(utseta) %>% 
+  mutate(sumfodur = cumsum(fodur_kg),
+         sumfodur = if_else(fodur_kg == 0, 0, sumfodur),
+         sumfodur90 = max(sumfodur)*0.9,
+         sumvoksturbio = cumsum(biomassi_vokstur_kg),
+         sumvoksturbio = if_else(biomassi_vokstur_kg <= 0, 0, sumvoksturbio),
+         maxbio = max(biomassi_ultimo_kg),
+         maxtal = max(tal_stk),
+         totalfodur = max(max(sumfodur)),
+         flutt_utsett_stk = ifelse(flutt_i_stk == 0, NA_real_, flutt_i_stk-flutt_ur_stk),
+         flutt_utsett_kg = ifelse(flutt_i_kg == 0, NA_real_, flutt_i_kg-flutt_ur_kg),
+         stodd_flutt = ifelse(flutt_utsett_stk <= 0, NA_real_, flutt_utsett_kg/flutt_utsett_stk),
+         stodd_utsett = ifelse(utsett_stk == 0, NA_real_, utsett_kg/utsett_stk),
+         stodd_tikid = ifelse(slatur_stk == 0, NA_real_, slatur_kg/slatur_stk),) %>% 
+  filter(!is.na(tol))
+
+alara90fod <- alara1 %>% 
+  group_by(utseta) %>% 
+  slice(which.min(abs(sumfodur-sumfodur90))) %>% 
+  filter(sumfodur != 0)
+
+#heinta djóralívskanningar úr databasu
+djoralivsyni <- tbl(con, "djoralivsyni") %>% 
+  left_join(tbl(con, "botnsyni"), by = "botn_id") %>% 
+  left_join(tbl(con, "kanningarrapport"), by = "rap_id") %>% 
+  mutate(lng = if_else(is.na(lng.x), plan_lng, lng.x),
+         lat = if_else(is.na(lat.x), plan_lat, lat.x)) %>%
+  mutate(lng = if_else(is.na(lng.y), lng.x, lng.y),
+         lat = if_else(is.na(lat.y), lat.x, lat.y)) %>%
+  collect()
+djoralivsyni <- djoralivsyni %>% 
+  mutate(year = lubridate::year(synistoku_dato)) %>% 
+  mutate(lng = abs(lng)*-1) %>% 
+  arrange(synistoku_dato) %>% 
+  filter(alioki_id == alioki)
+
+#disconnect from database
+DBI::dbDisconnect(con)
+
+```
+
+\newpage
+
+# Aliøki og alifjørður
+
+## Aliøki `r alioki` í alifjørði `r alifjord_nrr[[1]]` (`r alifjord_navn[[1]]`)
+
+```{r bakgrundskort, include=FALSE}
+library(sf)
+epsg <- 4326
+
+#importera gdb av alifirdunum
+alifjord <- sf::st_read("data/Aling.gdb", layer = "alifirdir")
+alifjord <- sf::st_transform(alifjord, epsg)
+alifjord <- alifjord %>% filter(bay_permit_name == alifjord_nrr[[1]])
+#importera gdb av aliøkjunum
+alipoly <- sf::st_read("data/Aling.gdb", layer = "alioki")
+alipoly <- sf::st_transform(alipoly, epsg)
+alipolyoki <- alipoly %>% filter(area_permit_name == alioki)
+alibuf <- sf::st_boundary(alipoly)
+#importera shp av dybdarkurvunum, 5 m og 10 m eru "combined"
+dyb <- sf::st_read("data/dybsimplified/dyb.shp")
+dyb <- sf::st_transform(dyb, epsg)
+dyb <- sf::st_crop(dyb, sf::st_boundary(alifjord))
+
+#dybdarkurvar til polygon
+#her er neyðugt at sletta nakrar linjur, tí tað skulu verða minst 3 punkt fyri at tekna eitt polygon
+#hetta riggar ikki nóg væl sum er!! skal kanska teknast manuelt :(
+#dybpoly <- dyb %>% rowwise() %>%  mutate(leng = length(geometry)) %>% filter(leng > 8)
+#dybpoly <- sf::st_cast(sf::st_as_sf(dybpoly), "POLYGON")
+
+#background maps
+lendiskortlayer <- sf::st_layers("data/lendiskort.gdb")
+lendiskort <- sf::st_read("data/lendiskort.gdb", layer = "lendiskort_bruksoki")
+lendiskort <- sf::st_transform(lendiskort, epsg)
+lendiskortoyggjar <- sf::st_read("data/lendiskort.gdb", layer = "oyggjar")
+lendiskortoyggjar <- sf::st_transform(lendiskortoyggjar, epsg)
+lendiskortlinjur <- sf::st_read("data/lendiskort.gdb", layer = "lendiskort_linjur")
+lendiskortlinjur <- sf::st_transform(lendiskortlinjur, epsg)
+
+bakgrundskort <- ggplot() +
+  geom_sf(data = lendiskortoyggjar, fill = "snow2", colour = "snow2") +
+  geom_sf(data = lendiskort %>% filter(area_type == "Dyrkad"), fill = "darkseagreen3", colour = NA) +
+  geom_sf(data = lendiskort %>% filter(area_type == "Vanligt bygt oki"), fill = "darkseagreen", colour = NA) +
+  geom_sf(data = lendiskort %>% filter(area_type == "Aarbakki"), fill = "skyblue3") +
+  geom_sf(data = lendiskort %>% filter(area_type == "Vatn"), fill = "skyblue3") +
+  geom_sf(data = lendiskortlinjur %>% filter(line_type == "Aarmidja"), colour = "lightskyblue")
+
+#ein simpul versión bert við strandalinjum
+bakgrundskort_simp <- ggplot() +
+  geom_sf(data = lendiskortoyggjar, fill = "snow2", colour = "snow2")
+
+#bakgrundslitir
+bakgrundbla <-  theme(axis.title = element_blank(),
+                      panel.background = element_rect(fill = "#E0FFFF",
+                                                      colour = "#E0FFFF",
+                                                      size = 0.5, linetype = "solid"))
+#skift stødd og axis
+skrift <- theme(axis.text = element_blank(),
+                axis.title = element_blank(),
+                legend.title = element_text(size = 9, face = "bold"),
+                strip.text.y = element_text(size = 7),
+                strip.text.x = element_text(size = 7),
+                legend.text = element_text(size = 8),
+                legend.key.size = unit(0.8, 'lines'),
+                title = element_text(10))
+
+alikort <- bakgrundskort +
+  geom_sf(data = dyb, aes(colour = depth), inherit.aes = FALSE) +
+  geom_sf(data = alifjord,
+          colour = "black", fill = NA, inherit.aes = FALSE, alpha = 0.3) +
+  geom_sf(data = alipoly %>% filter(area_permit_name == alioki),
+          colour = "red4", fill = "red", inherit.aes = FALSE, alpha = 0.3) +
+  geom_sf(data = alipoly %>% filter(area_permit_name !=  alioki),
+          colour = "grey20", fill = "grey20", inherit.aes = FALSE, alpha = 0.3) +
+  geom_sf_text(data = alipoly, aes(label = area_permit_name), inherit.aes = FALSE, colour = "black") +
+  geom_sf_text(data = alifjord, aes(label = bay_permit_name), inherit.aes = FALSE, colour = "black") +
+  scale_colour_viridis_c(direction = -1, begin = 0.1, end = 0.9, alpha = 0.8, name = "dýpd:") +
+  coord_sf(xlim = sf::st_bbox(alifjord)[c(1,3)], ylim = sf::st_bbox(alifjord)[c(2,4)], expand = FALSE) +
+  ggtitle(paste("Kort yvir aliøki", alioki))+
+  theme_bw() +
+  bakgrundbla +
+  theme(legend.position = "right", axis.text = element_text(size = 7))
+
+```
+
+
+```{r kortalioki, out.width="100%", fig.cap="Kort yvir aliøki og alifjørð"}
+alikort
+```
+
+\newpage
+
+# Lyklatøl frá rakstrinum
+
+Talvur við lyklatølum frá rakstri (Aliskipanini) og forsøgn (Aliætlan) eru víst í Tables \@ref(tab:lyklatol1), \@ref(tab:lyklatol2), \@ref(tab:lyklatol3) og \@ref(tab:lyklatol4).
+Ein markering (*) á útsetuni merkir, at fiskur varð ikki útsettur á aliøkinum, men fluttur til aliøki.
+
+
+```{r lyklatol1}
+ali_lyklatol <- alara2 %>% 
+  filter(!is.na(utseta)) %>%
+  filter(if(yvirlapp==TRUE) tol == "Rakstur" else tol !="einki") %>%
+  group_by(tol, utseta, maxbio, totalfodur) %>% 
+  summarise(utseting_byrja = min(ali_date[!is.na(utsett_stk) & utsett_stk >0]),
+            utseting_endad = max(ali_date[!is.na(utsett_stk) & utsett_stk >0]),
+            maxbio_dato = max(ali_date[biomassi_ultimo_kg == maxbio]),
+            fluttseting_byrja = min(ali_date[!is.na(flutt_utsett_stk) & flutt_utsett_stk >0]),
+            fluttseting_endad = max(ali_date[!is.na(flutt_utsett_stk) & flutt_utsett_stk >0]),
+            utseting_flyting_byrja = if_else(!is.finite(utseting_byrja), 
+                                             fluttseting_byrja, utseting_byrja),
+            utseting_flyting_endad = if_else(!is.finite(utseting_endad), 
+                                             fluttseting_endad, utseting_endad),
+            utseta_endar = min(ali_date[sumfodur == 0]),
+            n_utsett = sum(utsett_stk, na.rm = TRUE),
+            n_flutt = sum(flutt_utsett_stk[flutt_utsett_stk >0], na.rm = TRUE),
+            n_utsett_flutt = ifelse(is.na(n_utsett) | n_utsett == 0, 
+                                    n_flutt, n_utsett),
+            utsett_ella_flutt = ifelse(is.na(n_utsett) | n_utsett == 0, 
+                                       "*", " "),
+            n_flutt_i = sum(flutt_i_stk, na.rm = TRUE),
+            n_flutt_ur = sum(flutt_ur_stk, na.rm = TRUE),
+            kg_flutt_i = sum(flutt_i_kg, na.rm = TRUE),
+            kg_flutt_ur = sum(flutt_ur_kg, na.rm = TRUE),
+            stodd_utsett = ifelse(is.na(mean(stodd_utsett[stodd_utsett<3], na.rm = TRUE)),
+                                  round(mean(stodd_flutt, na.rm = TRUE),3),
+                                  round(mean(stodd_utsett[stodd_utsett<3], na.rm = TRUE),3)),
+            fiskur_fluttur = if_else(!is.na(n_flutt_i) | !is.na(n_flutt_ur), TRUE, FALSE),
+            n_sloppi = sum(sloppid_stk, na.rm = TRUE),
+            n_felli = sum(felli_stk, na.rm = TRUE),
+            felli_perc = ifelse(n_utsett ==0,
+                                round(n_felli/(n_flutt_i-n_flutt_ur)*100,1),
+                                round(n_felli/n_utsett*100,1)),
+            n_gingi = n_utsett_flutt-n_flutt_ur+n_flutt_i-n_felli-n_sloppi,
+            voksturbio = sum(biomassi_vokstur_kg, na.rm = TRUE),
+            mdr_aling = sum(sumfodur > 0),
+            mdr_brakk = sum(sumfodur == 0),
+            n_tikid = sum(slatur_stk, na.rm = TRUE),
+            kg_tikid = sum(slatur_kg, na.rm = TRUE),
+            stodd_tikid = round(mean(stodd_tikid[stodd_tikid<12], na.rm = TRUE),3)
+  ) %>%
+  mutate(mdr_brakk = ifelse(tol == "Forsøgn", NA, mdr_brakk),
+         voksturbio = ifelse(tol == "Forsøgn" & voksturbio == 0, NA, voksturbio),
+         utseta_navn = paste(utseta, utsett_ella_flutt))
+
+tol1 <- ali_lyklatol %>% 
+  ungroup() %>% 
+  select(utseta_navn, utseting_flyting_byrja, utseting_flyting_endad,
+         utseta_endar, mdr_aling, mdr_brakk) %>% 
+  rename("Útseta" = utseta_navn,
+         "Útseting byrjar" = utseting_flyting_byrja,
+         "Útseting endar" = utseting_flyting_endad,
+         "Útseta endar" = utseta_endar,
+         "Aling (mðr)" = mdr_aling,
+         "Brakkligið (mðr)" = mdr_brakk)
+knitr::kable(tol1, caption = "Aling - Lyklatøl rakstri og forsøgn (1)", booktabs = T, align = c("l", "c", "c", "c", "r", "r")) %>% 
+  kable_styling(bootstrap_options = c("condensed"), full_width = F) %>% 
+  kable_styling(latex_options = c("hold_position"))
+```
+
+```{r lyklatol2}
+tol2 <- ali_lyklatol %>% 
+  ungroup() %>% 
+  select(utseta_navn, n_utsett_flutt, stodd_utsett, n_felli, felli_perc, n_gingi) %>% 
+  rename("Útseta" = utseta_navn,
+         "Fiskur útsettur (stk)" = n_utsett_flutt,
+         "Miðal stødd útsett (kg)" = stodd_utsett,
+         "Felli (stk)" = n_felli,
+         "Felli (%)" = felli_perc,
+         "Fiskur gingið (stk)" = n_gingi)
+knitr::kable(tol2, caption = "Aling - Lyklatøl rakstri og forsøgn (2)", booktabs = T) %>% 
+  kable_styling(bootstrap_options = c("condensed"), full_width = F) %>% 
+  kable_styling(latex_options = c("hold_position"))
+```
+
+```{r lyklatol3}
+tol3 <- ali_lyklatol %>% 
+  ungroup() %>% 
+  select(utseta_navn, maxbio_dato, maxbio, voksturbio, totalfodur) %>% 
+  rename("Útseta" = utseta_navn,
+         "Størst biomassi (mðr)" = maxbio_dato,
+         "Størst biomassi (kg)" = maxbio,
+         "Vøkstur biomassa (kg)" = voksturbio,
+         "Fóðurnýtsla (kg)" = totalfodur)
+knitr::kable(tol3, caption = "Aling - Lyklatøl rakstri og forsøgn (3)", booktabs = T, align = c("l", "c", "r", "r", "r")) %>% 
+  kable_styling(bootstrap_options = c("condensed"), full_width = F) %>% 
+  kable_styling(latex_options = c("hold_position"))
+```
+
+```{r lyklatol4}
+tol4 <- ali_lyklatol %>% 
+  ungroup() %>% 
+  select(utseta_navn, n_tikid, kg_tikid, stodd_tikid) %>% 
+  rename("Útseta" = utseta_navn,
+         "fiskur tikin (stk)" = n_tikid,
+         "fiskur tikin (kg)" = kg_tikid,
+         "Miðal vekt (kg)" = stodd_tikid)
+knitr::kable(tol4, caption = "Aling - Lyklatøl rakstri og forsøgn (4)", booktabs = T) %>% 
+  kable_styling(bootstrap_options = c("condensed"), full_width = F) %>% 
+  kable_styling(latex_options = c("hold_position"))
+```
+
+
+
+\newpage
+
+# Positiónirnar á ringsýnunum á alifjørði `r alifjord_nrr[[1]]` øll árini
+
+Sí Figures \@ref(fig:kortrsfjord) og \@ref(fig:kortrsfjordtogether)
+
+```{r kortrsfjord, out.width='100%', fig.cap="Positiónirnar á ringsýnunum á alifjørðinum, fyri hvørt ár"}
+dfkort <- ringpos %>% 
+  filter(!is.na(year)) 
+
+dfk <- dfkort %>% 
+  filter(stodslag_id == "RS")
+
+talrap <- length(unique(dfkort$rap_id))
+stodd <- ifelse(talrap > 5, 0.6, 1)
+
+ringsynifjord <- bakgrundskort_simp +
+  geom_sf(data = dyb, colour = dybcolour) +
+  geom_sf(data = alipoly, fill = NA, colour = "black", inherit.aes = FALSE) +
+  geom_point(data = dfk,
+             aes(y = lat, x = lng, 
+                 colour = factor(year)),
+             show.legend = TRUE,
+             alpha = 0.8,
+             size = stodd) +
+  coord_sf(xlim = c(min(dfk$lng, na.rm = TRUE), max(dfk$lng, na.rm = TRUE))+c(-0.005,0.005),
+           ylim = c(min(dfk$lat, na.rm = TRUE), max(dfk$lat, na.rm = TRUE))+c(-0.001,0.001),
+           expand = TRUE)+
+  scale_color_discrete(name = "Sýnistøku ár") +
+  guides(col = guide_legend(override.aes = list(shape = 15, size = 3)))+
+  theme_void() +
+  skrift + 
+  bakgrundbla
+
+
+ringsynifacetfjord <- ringsynifjord +
+  facet_wrap(~year) +
+  ggtitle(paste(alifjord_nrr, " - Sýnini tey seinastu árini", sep = "")) +
+  theme(legend.position = "none") +
+  bakgrundbla
+
+ringsynifacetfjord
+#ggpubr::ggarrange(ringsynifacetfjord, ringsynifjord, nrow = 2, heights = c(1,1.85))
+```
+
+```{r kortrsfjordtogether, out.width='100%', fig.cap="Positiónirnar á ringsýnunum á alifjørðinum, øll árini"}
+ringsynifjord
+```
+
+
+\newpage
+
+# Samandráttur av botnkanningunum
+
+## Biomassi, fóðurnøgdir og umhvørviskanningarnar á `r alioki`
+
+Sí Figure \@ref(fig:alitol).
+
+- **Sýnistøku dato:** Seinasti sýnistøku dagur er vístur.
+
+- **Tal av alieindum:** Tal av alieindum sum eru registreraðar í dátugrunninum *usbotn* fyri tí ávísu kanningina.
+
+- **Miðalstøða (sensoriskar):** Miðal av Støða II og Støða III pr. sýnisslag pr. alieind (um fleiri) verður roknað. Síðan verður tann hægsti miðalin (worst case) settur sum miðalstøðan.
+
+- **Miðalstøða (evnafrøðiligar):** Miðal av trimum teimum hægstu úrslitunum pr. sýnisslag pr. alieind (um fleiri) pr. evni verður roknað. Síðan verður tann hægsti miðalin (worst case) settur sum miðalstøðan.
+
+- **Rakstrartøl:** Rakstrartøl frá Aliskipanini: Biomassi og samlað fóðurnýtsla ultimo hvønn mánað, umframt forsøgn (um tøk) fyri komandi útsetu.
+
+
+```{r alitol, out.width='100%', fig.cap="Rakstrartøl og miðal støður á aliøkinum"}
+
+library(ggrepel)
+
+#TODO: møguliga seta eitt maks á hvussu stórt plottið kann verða eftir x-ásanum, og so deila tað í tvey ella fleiri
+xmin <- min(min(alara1$ali_date), min(urslitsens1$synistoku_dato), min(urslitkemi$synistoku_dato))
+xmax <- max(max(alara1$ali_date), max(urslitsens1$synistoku_dato), max(urslitkemi$synistoku_dato))
+synidato <- sensmean %>% group_by(utgava_dato) %>% summarise(synistoku_dato = max(synistoku_dato))
+
+#hetta er plottið við rakstrartølunum
+alaratol <- ggplot() +
+  geom_line(data = alara1,
+            aes(x = ali_date, y = biomassi_ultimo_kg/1000000, colour = "Biomassi", linetype = tol)) +
+  geom_line(data = alara1,
+            aes(x = ali_date, y = sumfodur/1000000, colour = "Samlaða fóður nøgdin", linetype = tol)) +
+  geom_segment(data = synidato, aes(x = synistoku_dato, xend = synistoku_dato, 
+                                    y = 0, yend = Inf), colour = "grey80",
+               linetype = 3, show.legend = FALSE) +
+  ylab(expression(10^6~kg)) +
+  coord_cartesian(xlim = c(xmin, xmax)) +
+  scale_x_date(breaks = "2 years", date_labels = "%Y") +
+  scale_color_manual(values = c("dodgerblue3", "magenta"), name = "Rakstrartøl") +
+  scale_linetype_discrete(name = element_blank()) +
+  scale_y_continuous()+
+  guides(color = guide_legend(order = 1),
+         linetype = guide_legend(order = 2))+
+  theme_minimal()+
+  geom_hline(yintercept = 0)+
+  theme(axis.title.x = element_blank(),
+        legend.key.size = unit(4, "pt"),
+        plot.margin = unit(c(2,0,0,0), "pt"),
+        axis.ticks.length.x.top = unit(0, "pt"),
+        legend.justification = "left",
+        axis.text.x = element_text(angle = 45, hjust = 1))
+
+#hetta er plotti við dagfestingunum!
+#TODO: brúka label repel, so at tað ikki er yvirplotting
+synistoka <- ggplot()+
+  geom_segment(data = synidato, aes(x = synistoku_dato, xend = synistoku_dato, y = 0, yend = 0, 
+                                    colour = "Sýnistøka"), 
+               linetype = 3) +
+  geom_text(data = synidato,
+            aes(x = synistoku_dato, y = 0, 
+                label = format(synistoku_dato, "%d-%b-%Y")), colour = "grey20",
+            hjust = 0.5, angle = 90,
+            show.legend = FALSE, size = 2.5) +
+  coord_cartesian(xlim = c(xmin, xmax)) +
+  scale_color_manual(values = c("grey80"), name = paste("Sýnistøku dato á ", alioki), labels = element_blank()) +
+  scale_x_date(breaks = synidato$synistoku_dato)+
+  theme_minimal() + 
+  theme(legend.key.size = unit(2, "pt"),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        panel.grid.major.x = element_line(linetype = 3, colour = "grey80"),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        plot.margin = unit(c(2,0,0,0), "pt"),
+        legend.justification = "left")
+
+#hetta er plotti við hvussu nógvar alieindir eru skrásettar í usbotn!
+#TODO: brúka label repel, so at tað ikki er yvirplotting
+alieindir <- ggplot(kemimean %>% distinct(synistoka, alieindir))+
+  geom_segment(aes(x = synistoka, xend = synistoka, y = 0, yend = 0, 
+                   colour = "Tal av alieindum"), 
+               linetype = 3, show.legend = TRUE) +
+  geom_text(aes(x = synistoka, y = 0, 
+                label = alieindir), colour = "grey20",
+            hjust = 0.5,
+            show.legend = FALSE, size = 3) +
+  coord_cartesian(xlim = c(xmin, xmax)) +
+  scale_color_manual(values = c("grey80"), name = "Tal av alieindum", labels = element_blank()) +
+  scale_x_date(breaks = synidato$synistoku_dato)+
+  theme_minimal() + 
+  theme(legend.key.size = unit(2, "pt"),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        panel.grid.major.x = element_line(linetype = 3, colour = "grey80"),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        plot.margin = unit(c(0,0,0,0), "pt"),
+        legend.justification = "left")
+
+#hetta er pointplot við miðal sensorisku støðuni!
+#TODO: brúka jitter, so at tað ikki er yvirplotting
+meansens <- ggplot(data = sensmean, aes(x = synistoku_dato, y = 0, colour = stodasens_stig))+
+  geom_point(size = 3)+
+  scale_colour_manual(values = StodaColourHex, drop = FALSE, name = "Miðalstøða (sensoriskar)", labels = StodLabel) +
+  coord_cartesian(xlim = c(xmin, xmax)) +
+  scale_x_date(breaks = synidato$synistoku_dato)+
+  theme_minimal() + 
+  theme(legend.key.size = unit(2, "pt"),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        panel.grid.major.x = element_line(linetype = 3, colour = "grey80"),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        plot.margin = unit(c(0,0,0,0), "pt"),
+        legend.justification = "left")
+#meansens
+
+#hetta er pointplot við miðal kemisku støðuni!
+#TODO: brúka jitter, so at tað ikki er yvirplotting
+meankem <- ggplot(data = kemimean, aes(x= synistoku_dato, y = 0, colour = stodakemi))+
+  geom_point(shape = 17, size = 3)+
+  scale_colour_manual(values = MarkColoursHex, drop = FALSE, name = "Miðalstøða (evnafrøðiligar)", labels = marklabels)+
+  coord_cartesian(xlim = c(xmin, xmax)) +
+  scale_x_date(breaks = synidato$synistoku_dato)+
+  theme_minimal() + 
+  theme(legend.key.size = unit(2, "pt"),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        panel.grid.major.x = element_line(linetype = 3, colour = "grey80"),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        plot.margin = unit(c(0,0,0,0), "pt"),
+        legend.justification = "left")
+
+#hetta er pointplot við miðal kemisku støðuni pr evni!
+#TODO: brúka jitter, so at tað ikki er yvirplotting
+meanEvni <- ggplot(data = kemimean %>% filter(evni %in% kemi3) %>% 
+                     ungroup() %>% 
+                     mutate(evni = factor(evni, levels = c("CU", "ZN", "LOI"),
+                                          labels = c("Kopar (Cu)", "Sink (Zn)", "Gløðitap (LOI)"))),
+                   aes(x= synistoku_dato, y = evnital, colour = evni_stodakemi, shape = evni))+
+  geom_point(size = 1.5)+
+  scale_colour_manual(values = MarkColoursHex, drop = FALSE,
+                      name = "Miðalstøða (evnafrøðiligar)",
+                      labels = marklabels, guide = FALSE)+
+  coord_cartesian(xlim = c(xmin, xmax)) +
+  scale_x_date(breaks = synidato$synistoku_dato)+
+  theme_minimal() +
+  theme(legend.key.size = unit(2, "pt"),
+        axis.title = element_blank(),
+        axis.text = element_blank(),
+        legend.title = element_blank(),
+        panel.grid.major.x = element_line(linetype = 3, colour = "grey80"),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.major.y = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        plot.margin = unit(c(0,0,0,0), "pt"),
+        legend.justification = "left")
+
+#her verða plottini samplaði í eitt stórt plott
+ggpubr::ggarrange(synistoka, alieindir, meansens, meankem, meanEvni, alaratol, ncol = 1, align = "v",
+                  heights = c(0.5, 0.2, 0.5, 0.5, 0.25, 1))
+```
+
+
+```{r}
+#plotti omanfyri skal tilpassast so at bara tær seinastu útseturnar verða vístar
+
+```
+
+
+
+```{r}
+# skal gerast so at rakstrar tøl fyri øll aliøki á fjørðinum síggjast
+
+# raksturfjord <- ggplot() +
+#   geom_line(data = alara1,
+#             aes(x = ali_date, y = biomassi_ultimo_kg/1000000, colour = "Biomassi", linetype = tol)) +
+#   geom_line(data = alara1,
+#             aes(x = ali_date, y = sumfodur/1000000, colour = "Samlaða fóður nøgdin", linetype = tol)) +
+#   geom_segment(data = synidato, aes(x = synistoku_dato, xend = synistoku_dato, 
+#                                     y = 0, yend = max(alara1$sumfodur)/1000000), colour = "grey80",
+#                linetype = 3, show.legend = FALSE) +
+#   ylab(expression(10^6~kg)) +
+#   coord_cartesian(xlim = c(xmin, xmax)) +
+#   scale_x_date(breaks = "2 years", date_labels = "%Y") +
+#   scale_color_manual(values = c("dodgerblue3", "magenta"), name = "Rakstrartøl") +
+#   scale_linetype_discrete(name = "" ) +
+#   scale_y_continuous()+
+#   theme_minimal()+
+#   geom_hline(yintercept = 0)+
+#   theme(axis.title.x = element_blank(),
+#         legend.key.size = unit(4, "pt"),
+#         plot.margin = unit(c(0,0,2,0), "pt"),
+#         axis.ticks.length.x.top = unit(0, "pt"),
+#         legend.justification = "left")
+
+#raksturfjord
+```
+
+
+
+\newpage
+
+## Positiónirnar á ringsýnunum á aliøki `r alioki` tær seinastu `r utsetur`. útseturnar
+
+```{r kortrs, out.width='100%', fig.cap="Positiónirnar á ringsýnunum tær seinastu útseturnar"}
+dfkort <- urslitsens1
+dfkort <- dfkort %>% 
+  filter(synistoku_dato > min(alarautseta$ali_date %>% tail(lev))) 
+dfk <- dfkort %>% 
+  filter(stodslag_id == "RS") %>% filter(utgava_slag != "ALIAU") #tekur áðrenn útsetu kanningar úr
+
+talrap <- length(unique(dfkort$year))
+stodd <- ifelse(talrap > 6, 0.8, 1)
+
+ringsyni <- bakgrundskort_simp +
+  geom_sf(data = dyb, colour = dybcolour) +
+  geom_sf(data = alipoly, fill = NA, colour = "black", inherit.aes = FALSE) +
+  geom_point(data = dfk,
+             aes(y = lat, x = lng, 
+                 colour = factor(year),
+                 shape = stodslag_id),
+             show.legend = FALSE, alpha = 0.8,
+             size = stodd) +
+  coord_sf(xlim = c(min(dfk$lng, na.rm = TRUE), max(dfk$lng, na.rm = TRUE))+c(-0.005,0.005), 
+           ylim = c(min(dfk$lat, na.rm = TRUE), max(dfk$lat, na.rm = TRUE))+c(-0.001,0.001), expand = TRUE)+
+  theme_minimal() +
+  skrift +
+  bakgrundbla
+#ringsyni
+
+ringsynifacet <-ringsyni +
+  facet_grid(.~year) +
+  ggtitle(paste(alioki, " - Ringsýni tær seinastu ", utsetur,". útseturnar", sep = ""))
+
+ggpubr::ggarrange(ringsynifacet, ringsyni, nrow = 2, heights = c(1,1.85))
+```
+
+
+\newpage
+
+# Sensoriskar kanningar
+
+## Miðalstøða av II og III
+
+```{r kortsens, out.width='100%', fig.cap="Miðalstøða av II og III á sýnunum"}
+
+dfkort <- dfkort
+
+talrap <- length(unique(dfkort$rap_id))
+stodd <- ifelse(talrap > 5, 0.8, 1)
+
+#map boundaries
+xlim <- c(min(dfkort$lng, na.rm = TRUE), max(dfkort$lng, na.rm = TRUE))
+ylim <- c(min(dfkort$lat, na.rm = TRUE), max(dfkort$lat, na.rm = TRUE))
+if(xlim[2] - xlim[1] < lngmin) {xlim <- mean(xlim) + c(-lngmin/2, lngmin/2)}
+if(ylim[2] - ylim[1] < latmin) {ylim <- mean(ylim) + c(-latmin/2, latmin/2)}
+
+#no of columns and rows to be facetted
+if(round(xlim[2] - xlim[1],3) <= lngmin) {colfacet <- 5} else {colfacet <- 3}
+if(round(ylim[2] - ylim[1],3) >= latmin & round(ylim[2] - ylim[1],3) <= latmax) {rowfacet <- 3} else {rowfacet <- 2}
+
+#kanna hvussu nógvar rows eru neyðugar
+if(ceiling(talrap/colfacet) == 0) {rowfacet = 1}
+if(ceiling(talrap/colfacet) < rowfacet) {rowfacet = ceiling(talrap/colfacet)}
+
+senskortfacet <- bakgrundskort_simp +
+  geom_sf(data = dyb, colour = dybcolour, size = 0.3) +
+  geom_sf(data = alipoly, fill = NA, colour = "black", inherit.aes = FALSE) +
+  geom_point(data = dfkort,
+             aes(y = lat, x = lng, 
+                 colour = stoda_iiogiii_stig_new,
+                 shape = stodslag_id),
+             alpha = 0.8, size = stodd) +
+  scale_colour_manual(values = StodaColourHex, drop = FALSE, name = "Støða", labels = StodLabel) +
+  scale_shape(name =  "Støðslag") +
+  guides(col = guide_legend(override.aes = list(shape = 15, size = 3)))+
+  guides(shape = guide_legend(override.aes = list(size = 2))) +
+  facet_wrap_paginate(~kanning, ncol = colfacet, nrow = rowfacet, page = 1) +
+  coord_sf(xlim = xlim, ylim = ylim)+
+  theme_minimal() +
+  bakgrundbla +
+  skrift +
+  ggtitle(paste(alioki, "- Miðalstøða av II og III (sensoriskt) á hvørjum sýni"))
+
+n <- ceiling(talrap/(colfacet*rowfacet))
+if(n > 1) {
+  for(i in 1:n){
+    print(senskortfacet + 
+            facet_wrap_paginate(~kanning, ncol = colfacet, nrow = rowfacet, page = i) +
+            ggtitle(paste0(alioki, " - Miðalstøða av II og III (sensoriskt) á hvørjum sýni (", i, "/", n, ")")))
+  }
+} else {
+  senskortfacet
+}
+
+```
+
+```{r kortsensalieind, out.width='100%'}
+
+# dfk <- urslitsens1 %>%
+#   filter(!is.na(lng) | !is.na(lat)) %>%
+#   filter(stodslag_id == "RS") %>%
+#   st_as_sf(coords = c("lng", "lat"), crs = epsg) %>%
+#   group_by(rap_id, alieind) %>% 
+#   summarise(multipoint = st_convex_hull(geometry))
+# 
+# senskortfacet <- bakgrundskort +
+#   geom_sf(data = dyb, colour = dybcolour, size = 0.3) +
+#   geom_sf(data = alipoly, fill = NA, colour = "black", inherit.aes = FALSE) +
+#   geom_point(data = dfk,
+#              aes(y = lat, x = lng,
+#                  colour = stoda_iiogiiifac,
+#                  shape = stodslag_id),
+#              alpha = 0.8, size = 1) +
+#   scale_colour_manual(values = StodaColourHex, drop = FALSE, name = "Støða", labels = StodLabel) +
+#   scale_shape(name =  "Sýnislag") +
+#   #scale_colour_viridis_c(direction = -1, begin = 0.1, end = 0.9, alpha = 0.8, name = "Dýpi")+
+#   facet_wrap(~kanning, ncol = 2) +
+#   coord_sf(xlim = c(min(dfk$lng, na.rm = TRUE), max(dfk$lng, na.rm = TRUE)), ylim = c(min(dfk$lat, na.rm = TRUE), max(dfk$lat, na.rm = TRUE)), expand = TRUE)+
+#   theme_minimal() +
+#   bakgrundbla +
+#   theme(axis.text = element_blank(), axis.title = element_blank(), plot.margin = margin(0, 0, 0, 0, "pt")) +
+#   ggtitle(paste(alioki, "- Miðalstøða (sensoriskt) á hvørjum sýni"))
+# senskortfacet
+
+```
+
+```{r senstimeplot, out.width = "60%", fig.cap="Miðalvirði av II og III, pr. sýni (rundingar), miðal pr. alieind (fýrkantar)"}
+senstimetime <- urslitsens1 %>%
+  filter(stodslag_id == "RS") %>% 
+  ungroup() %>%
+  mutate(alieind = ifelse(is.na(alieind), "-", alieind)) %>% 
+  ggplot() +
+  geom_point(aes(x = synistoku_dato, y = stoda_iiogiii_mean, colour = alieind, fill = alieind), alpha = 0.5)+
+  geom_point(aes(x = synistoku_dato, y = stoda_iiogiii_mean, colour = alieind, fill = alieind),
+             alpha = 1, stat = "summary", fun.y = "mean", shape = 22, colour = "grey20", size = 2) +
+  theme_minimal() +
+  geom_hline(yintercept = 0) +
+  ggtitle(paste(alioki, "- Ringsýni - Miðalvirði av II og III pr. alieind")) +
+  theme(axis.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")
+senstimetime
+```
+
+\newpage
+
+## Fóður og/ella skarn
+
+```{r kortfodurskarn, out.width='100%', fig.cap="Fóður og/ella skarn"}
+#hetta skal justerast tá fleiri kanningar koma og fóður og skarn eru hvør sín variabul
+
+dfkort <- urslitbotnl
+dfkort <- dfkort %>% 
+  filter(synistoku_dato > min(alarautseta$ali_date %>% tail(lev)))
+dfkort <- dfkort %>% 
+  filter(botnlysing_id %in% c("fodur_skarn", "fodur", "skarn")) %>% 
+  group_by(rap_id, botn_id, stodslag_id, lat, lng, kanning) %>% 
+  summarise(janei_id = if_else(sum(janei_id == "j")>0, "j", "n"),
+            botnlysing_id = "fodur_skarn")
+
+talrap <- length(unique(dfkort$rap_id))
+stodd <- ifelse(talrap > 6, 0.8, 1)
+
+#map boundaries
+xlim <- c(min(dfkort$lng, na.rm = TRUE), max(dfkort$lng, na.rm = TRUE))
+ylim <- c(min(dfkort$lat, na.rm = TRUE), max(dfkort$lat, na.rm = TRUE))
+if(xlim[2] - xlim[1] < lngmin) {xlim <- mean(xlim) + c(-lngmin/2, lngmin/2)}
+if(ylim[2] - ylim[1] < latmin) {ylim <- mean(ylim) + c(-latmin/2, latmin/2)}
+
+#no of columns and rows to be facetted
+if(round(xlim[2] - xlim[1],3) <= lngmin) {colfacet <- 5} else {colfacet <- 3}
+if(round(ylim[2] - ylim[1],3) >= latmin & round(ylim[2] - ylim[1],3) <= latmax) {rowfacet <- 3} else {rowfacet <- 2}
+
+#kanna hvussu nógvar rows eru neyðugar
+if(ceiling(talrap/colfacet) == 0) {rowfacet = 1}
+if(ceiling(talrap/colfacet) < rowfacet) {rowfacet = ceiling(talrap/colfacet)}
+
+sensbotnl <- bakgrundskort_simp +
+  geom_sf(data = dyb, colour = dybcolour, size = 0.3) +
+  geom_sf(data = alipoly, fill = NA, colour = "black", inherit.aes = FALSE) +
+  geom_point(data = dfkort,
+             aes(y = lat, x = lng, 
+                 colour = janei_id,
+                 shape = stodslag_id),
+             alpha = 0.8,
+             size = stodd) +
+  scale_colour_manual(values = c(jalit, neilit), drop = FALSE, na.value = na_litur, name = "Fóður/skarn", labels = c("ja", "nei")) +
+  guides(col = guide_legend(override.aes = list(shape = 15, size = 3)))+
+  guides(shape = guide_legend(override.aes = list(size = 2))) +
+  scale_shape(name =  "Støðslag") +
+  facet_wrap_paginate(~kanning, ncol = colfacet, nrow = rowfacet, page = 1) +
+  coord_sf(xlim = xlim, 
+           ylim = ylim, expand = TRUE)+
+  theme_minimal() +
+  bakgrundbla +
+  skrift + 
+  ggtitle(paste0(alioki, " - Fóður og/ella skarn"))
+
+n <- ceiling(talrap/(colfacet*rowfacet))
+if(n > 1) {
+  for(i in 1:n){
+    print(sensbotnl + facet_wrap_paginate(~kanning, ncol = colfacet, nrow = rowfacet, page = i) +
+            ggtitle(paste0(alioki, "- Fóður og/ella skarn (", i, "/", n, ")")))
+  }
+} else {
+  sensbotnl
+}
+
+```
+
+\newpage
+
+# Einfaldar djóralívskanningar
+
+```{r kortdjoreinfold1, out.width='100%', fig.cap="Einfaldar djóralívskanningar, tindadýr, krabbadýr og lindýr"}
+dfkort <- urslitdjoreinkul
+dfkort <- dfkort %>% 
+  filter(synistoku_dato > min(alarautseta$ali_date %>% tail(lev)))
+
+talrap <- length(unique(dfkort$rap_id))
+stodd <- ifelse(talrap > 6, 0.8, 1)
+
+#map boundaries
+xlim <- c(min(dfkort$lng, na.rm = TRUE), max(dfkort$lng, na.rm = TRUE))
+ylim <- c(min(dfkort$lat, na.rm = TRUE), max(dfkort$lat, na.rm = TRUE))
+if(xlim[2] - xlim[1] < lngmin) {xlim <- mean(xlim) + c(-lngmin/2, lngmin/2)}
+if(ylim[2] - ylim[1] < latmin) {ylim <- mean(ylim) + c(-latmin/2, latmin/2)}
+
+#no of columns and rows to be facetted
+if(round(ylim[2] - ylim[1],3) >= latmin & round(ylim[2] - ylim[1],3) <= latmax) {rowfacet <- 3} else {rowfacet <- 2}
+colfacet <- 3
+
+#kanna hvussu nógvar rows eru neyðugar
+if(talrap < rowfacet) {rowfacet = talrap}
+
+dfkort <- dfkort %>% 
+  filter(botndjor_id %in% c("tindadyr", "krabbadyr", "lindyr")) %>% 
+  mutate(botndjor_id = factor(botndjor_id, levels = c("tindadyr", "krabbadyr", "lindyr"),
+                              labels = c("Tindadýr", "Krabbadýr", "Lindýr")))
+
+djornogd_col4 <- c("#FFBA4F", "#D64260", "#4D1370")
+col4_labels <- c("eingi", "minni enn 5", "5 ella meir")
+
+kortDjor <- bakgrundskort_simp +
+  geom_sf(data = dyb, colour = dybcolour, size = 0.3) +
+  geom_sf(data = alipoly, fill = NA, colour = "black", inherit.aes = FALSE) +
+  geom_point(data = dfkort,
+             aes(y = lat, x = lng, 
+                 colour = factor(djornogd_stig_adjusted, levels = c(0,1,5), labels = col4_labels),
+                 shape = stodslag_id),
+             alpha = 0.8,
+             size = stodd) +
+  scale_colour_manual(values = djornogd_col4, drop = FALSE, na.value = "grey", name = "Nøgd") +
+  guides(col = guide_legend(override.aes = list(shape = 15, size = 3, order = 2)))+
+  guides(shape = guide_legend(override.aes = list(size = 2, order = 1))) +
+  scale_shape(name =  "Støðslag") +
+  facet_grid_paginate(kanning~botndjor_id, ncol = colfacet, nrow = rowfacet, page = 1) +
+  coord_sf(xlim = xlim, ylim = ylim, expand = TRUE)+
+  theme_minimal() +
+  bakgrundbla +
+  skrift +
+  ggtitle(paste(alioki, "- einfaldar djóralívskanningar"))
+
+n <- ceiling(talrap/rowfacet)
+if(n > 1) {
+  for(i in 1:n){
+    print(kortDjor + facet_grid_paginate(kanning~botndjor_id, ncol = colfacet, nrow = rowfacet, page = i) +
+            ggtitle(paste0(alioki, " - einfaldar djóralívskanningar (", i, "/", n, ")")))
+  }
+} else {
+  kortDjor
+}
+```
+
+```{r kortdjoreinfold2, out.width='100%', fig.cap="Einfaldar djóralívskanningar, Malecoceros fuliginosus, Capitella capitata og arðir bustmaðkar. Capitella capitata gjørdist partur av kanningunum í 2017."}
+dfkort <- urslitdjoreinkul
+dfkort <- dfkort %>% 
+  filter(synistoku_dato > min(alarautseta$ali_date %>% tail(lev)))
+
+talrap <- length(unique(dfkort$rap_id))
+stodd <- ifelse(talrap > 6, 0.8, 1)
+
+dfkort <- dfkort %>% 
+  filter(botndjor_id %in% c("madkar", "capitella_capitata", "malacoceros_fuliginosus")) %>% 
+  mutate(botndjor_id = factor(botndjor_id, levels = c("madkar", "malacoceros_fuliginosus", "capitella_capitata"),
+                              labels = c("Bustmaðkar (aðrir)", "M. fuliginosus", "C. capitata")))
+
+col4_labels <- c("eingir", "minni enn 5", "5 ella meir")
+
+#map boundaries
+xlim <- c(min(dfkort$lng, na.rm = TRUE), max(dfkort$lng, na.rm = TRUE))
+ylim <- c(min(dfkort$lat, na.rm = TRUE), max(dfkort$lat, na.rm = TRUE))
+if(xlim[2] - xlim[1] < lngmin) {xlim <- mean(xlim) + c(-lngmin/2, lngmin/2)}
+if(ylim[2] - ylim[1] < latmin) {ylim <- mean(ylim) + c(-latmin/2, latmin/2)}
+
+#no of columns and rows to be facetted
+if(round(ylim[2] - ylim[1],3) >= latmin & round(ylim[2] - ylim[1],3) <= latmax) {rowfacet <- 3} else {rowfacet <- 2}
+colfacet <- 3
+
+#kanna hvussu nógvar rows eru neyðugar
+if(talrap < rowfacet) {rowfacet = talrap}
+
+kortDjor <- bakgrundskort_simp +
+  geom_sf(data = dyb, colour = dybcolour, size = 0.3) +
+  geom_sf(data = alipoly, fill = NA, colour = "black", inherit.aes = FALSE) +
+  geom_point(data = dfkort,
+             aes(y = lat, x = lng, 
+                 colour = factor(djornogd_stig_adjusted, levels = c(0,1,5), labels = col4_labels),
+                 shape = stodslag_id),
+             alpha = 0.8,
+             size = stodd) +
+  scale_colour_manual(values = djornogd_col4, drop = FALSE, na.value = "grey", name = "Nøgd") +
+  guides(col = guide_legend(override.aes = list(shape = 15, size = 3, order = 2))) +
+  guides(shape = guide_legend(override.aes = list(size = 2, order = 1))) +
+  scale_shape(name =  "Støðslag") +
+  facet_grid_paginate(kanning~botndjor_id, ncol = colfacet, nrow = rowfacet, page = 1) +
+  coord_sf(xlim = xlim, ylim = ylim, expand = TRUE)+
+  theme_minimal() +
+  bakgrundbla +
+  skrift +
+  ggtitle(paste(alioki, "- einfaldar djóralívskanningar (bustmaðkar)"))
+
+n <- ceiling(talrap/rowfacet)
+if(n > 1) {
+  for(i in 1:n){
+    print(kortDjor + facet_grid_paginate(kanning~botndjor_id, ncol = colfacet, nrow = rowfacet, page = i) +
+            ggtitle(paste0(alioki, " - einfaldar djóralívskanningar (bustmaðkar) (", i, "/", n, ")")))
+  }
+} else {
+  kortDjor
+}
+```
+
+\newpage
+
+# Evnafrøðiligar kanningar
+
+## Kort av kopar (Cu), sink (Zn) og gløðitap (LOI) úrslitunum
+
+Úrslitini frá evnafrøðiligu sediment kanningunum eru víst á kortunum niðanfyri.
+
+```{r kortkemi, out.width='100%', fig.cap="Kopar (Cu), Gløðitap (LOI) og Sink (Zn)"}
+dfkort <- urslitkemi
+dfkort <- dfkort %>% 
+  filter(synistoku_dato > min(alarautseta$ali_date %>% tail(lev)))
+
+talrap <- length(unique(dfkort$rap_id))
+stodd <- ifelse(talrap > 6, 0.8, 1)
+
+dfkort <- dfkort %>% 
+  filter(evni %in% kemi3)
+
+#map boundaries
+xlim <- c(min(dfkort$lng, na.rm = TRUE), max(dfkort$lng, na.rm = TRUE))
+ylim <- c(min(dfkort$lat, na.rm = TRUE), max(dfkort$lat, na.rm = TRUE))
+if(xlim[2] - xlim[1] < lngmin) {xlim <- mean(xlim) + c(-lngmin/2, lngmin/2)}
+if(ylim[2] - ylim[1] < latmin) {ylim <- mean(ylim) + c(-latmin/2, latmin/2)}
+
+#no of columns and rows to be facetted
+if(round(ylim[2] - ylim[1],3) >= latmin & round(ylim[2] - ylim[1],3) <= latmax) {rowfacet <- 3} else {rowfacet <- 2}
+colfacet <- 3
+
+#kanna hvussu nógvar rows eru neyðugar
+if(talrap < rowfacet) {rowfacet = talrap}
+
+kortKemi <- bakgrundskort_simp +
+  geom_sf(data = dyb, colour = dybcolour, size = 0.3) +
+  geom_sf(data = alipoly, fill = NA, colour = "black", inherit.aes = FALSE) +
+  geom_point(data = dfkort,
+             aes(y = lat, x = lng,
+                 shape = stodslag_id,
+                 colour = syni_stodakemi),
+             alpha = 0.8,
+             size = stodd) +
+  scale_colour_manual(values = MarkColoursHex, drop = FALSE, na.value = na_litur, name = "Støða", labels = marklabels) +
+  guides(col = guide_legend(override.aes = list(shape = 15, size = 3)))+
+  guides(shape = guide_legend(override.aes = list(size = 2)))+
+  scale_shape(name =  "Støðslag") +
+  facet_grid_paginate(kanning~evni, ncol = colfacet, nrow = rowfacet, page = 1) +
+  coord_sf(xlim = xlim, ylim = ylim, expand = TRUE)+
+  theme_minimal() +
+  bakgrundbla +
+  skrift +
+  ggtitle(paste0(alioki, " - Kopar (Cu), Gløðitap (LOI) og Sink (Zn)"))
+
+
+n <- ceiling(talrap/rowfacet)
+if(n > 1) {
+  for(i in 1:n){
+    print(kortKemi + facet_grid_paginate(kanning~evni, ncol = 3, nrow = rowfacet, page = i)+
+            ggtitle(paste0(alioki, "- Kopar (Cu), Gløðitap (LOI) og Sink (Zn) (", i, "/", n, ")")))
+  }
+} else {
+  kortKemi
+}
+```
+
+
+\newpage
+
+## Tíðarseria av evnafrøðiligu sediment kanningunum (Cu, Zn og LOI)
+
+### Samanberingarsýni, fjarasýni og økissýni
+
+```{r kemitimeplot, out.width="80%", fig.cap="Tíðarseria av kopar (Cu), gløðitap (LOI) og sink (Zn) í fjarasýnum (FS), økissýnum (OS) og samanberingarsýnum (SS)"}
+kemitime <- urslitkemi %>%
+  filter(evni %in% kemi3) %>% 
+  filter(!stodslag_id == "RS") %>% 
+  ungroup() %>% 
+  mutate(evni = factor(evni, levels = kemi3,
+                       labels = kemilabels)) %>% 
+  ggplot() +
+  geom_point(aes(x = synistoku_dato, y = virdi, colour = stodslag_id, fill = stodslag_id), alpha = 0.5)+
+  geom_point(aes(x = synistoku_dato, y = virdi, colour = stodslag_id, fill = stodslag_id),
+             alpha = 1, stat = "summary", fun.y = "mean", shape = 21, colour = "grey20", size = 2) +
+  theme_minimal() +
+  geom_hline(yintercept = 0) +
+  ggtitle(paste(alioki, "- Tíðarseria av kopar, gløðitap, og sink")) +
+  theme(axis.title = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")+
+  facet_grid(evni~stodslag_id, scales = "free_y") +
+  ggpubr::stat_cor(aes(x = synistoku_dato, y = virdi, 
+                       label = paste(..rr.label.., ..p.label.., sep = "~`,`~")), size = 3)
+kemitime
+```
+
+### Ringsýni
+
+```{r kemiring, out.width="80%", fig.cap="Tíðarseria av kopar (Cu), gløðitap (LOI) og sink (Zn) í ringsýnum"}
+kemiRS <- urslitkemi %>%
+  filter(evni %in% kemi3) %>% 
+  filter(stodslag_id == "RS") %>% 
+  ungroup() %>% 
+  mutate(evni = factor(evni, levels = kemi3,
+                       labels = kemilabels)) %>%
+  ggplot() +
+  geom_rect(data = dfMark, aes(ymin = 0, ymax = avaring),
+            fill = s1, xmin= -Inf, xmax = Inf, alpha = 0.1)+
+  geom_rect(data = dfMark, aes(ymin = avaring, ymax = markvirdi),
+            fill = s3, xmin= -Inf, xmax = Inf, alpha = 0.1)+
+  geom_rect(data = dfMark, aes(ymin = markvirdi, ymax = Inf),
+            fill = s4, xmin= -Inf, xmax = Inf, alpha = 0.1)+
+  geom_point(alpha = 0.4, aes(x = synistoku_dato, y = virdi), show.legend = FALSE)+
+  geom_point(aes(x = synistoku_dato, y = virdi), shape = 22, alpha = 0.7,
+             stat = "summary", fun.y = "mean", size = 2, fill = "grey20", show.legend = FALSE) +
+  theme_minimal() +
+  geom_hline(yintercept = 0, show.legend = FALSE) +
+  scale_linetype_manual(values = c(2,5))+
+  ggtitle(paste(alioki, "- Tíðarseria av kopar, gløðitap og sink í ringsýnum")) +
+  theme(axis.title = element_blank(),
+        axis.text.x = element_text(angle = 35, hjust = 1),
+        legend.position = "right")+
+  facet_grid(evni~., scales = "free_y") +
+  geom_smooth(method = "lm", aes(x = synistoku_dato, y = virdi), alpha = 0.25, linetype = 2,
+              color = "black", size = 0.6)+
+  ggpubr::stat_cor(aes(x = synistoku_dato, y = virdi,
+                       label = paste(..rr.label.., ..p.label.., sep = "~`,`~")), size = 3)
+#kemiRS
+```
+
+
+
+```{r kemiringeind, out.width="80%", fig.cap="Tíðarseria av kopar (Cu), gløðitap (LOI) og sink (Zn) í ringsýnum pr. alieind"}
+kemiRSeind <- urslitkemi %>%
+  filter(evni %in% kemi3) %>% 
+  filter(stodslag_id == "RS") %>% 
+  ungroup() %>% 
+  mutate(evni = factor(evni, levels = kemi3,
+                       labels = kemilabels)) %>%
+  mutate(alieind = ifelse(is.na(alieind), "-", alieind)) %>% 
+  ggplot() +
+  geom_rect(data = dfMark, aes(ymin = 0, ymax = avaring),
+            fill = s1, xmin= -Inf, xmax = Inf, alpha = 0.1)+
+  geom_rect(data = dfMark, aes(ymin = avaring, ymax = markvirdi),
+            fill = s3, xmin= -Inf, xmax = Inf, alpha = 0.1)+
+  geom_rect(data = dfMark, aes(ymin = markvirdi, ymax = Inf),
+            fill = s4, xmin= -Inf, xmax = Inf, alpha = 0.1)+
+  geom_point(alpha = 0.4, aes(x = synistoku_dato, y = virdi, colour = alieind), show.legend = FALSE)+
+  geom_point(aes(x = synistoku_dato, y = virdi, fill = alieind), shape = 22, alpha = 0.5,
+             stat = "summary", fun.y = "mean", size = 2, colour = "grey20", show.legend = FALSE) +
+  theme_minimal() +
+  geom_hline(yintercept = 0, show.legend = FALSE) +
+  scale_linetype_manual(values = c(2,5))+
+  ggtitle(paste(alioki, "- Tíðarseria av kopar, gløðitap og sink í ringsýnum pr. alieind")) +
+  theme(axis.title = element_blank(),
+        axis.text.x = element_text(angle = 35, hjust = 1),
+        legend.position = "right")+
+  facet_grid(evni~., scales = "free_y")
+#kemiRSeind
+```
+
+```{r RS, out.width="80%", fig.cap="Tíðarseria av kopar (Cu), gløðitap (LOI) og sink (Zn) í ringsýnunum, a) vísir ringsýnini (rundingar) og miðal fyri kanningina (fýrkantar) og í b) eru ringsýnini lita eftir alieind"}
+
+a1 <- kemiRS +
+  ggtitle(paste(alioki, "- Ringsýni"))
+b1 <- kemiRSeind +
+  ggtitle(paste(alioki, "- Ringsýni pr. alieind"))
+
+ggpubr::ggarrange(a1,b1, labels = c("a)", "b)"))
+
+```
+
+\newpage
+
+# Evnafrøðiligar kanningar frá ár `r kemi`
+
+## Tíðarseria av evnafrøðiligu sediment kanningunum (Cu, Zn og LOI) frá ár `r kemi`
+
+### Samanberingarsýni, fjarasýni og økissýni frá ár `r kemi`
+
+```{r kemitimeplotar, out.width="80%", fig.cap="Tíðarseria av kopar (Cu), gløðitap (LOI) og sink (Zn) í fjarasýnum (FS), økissýnum (OS) og samanberingarsýnum (SS)"}
+if(max(urslitkemi$year)>kemi) {
+  kemitime_seinastu <- kemitime+
+    xlim(limits = c(as.Date(ISOdate(kemi, 1,1)), NA))+
+    ggtitle(paste(alioki, "- Tíðarseria av kopar, gløðitap, og sink - frá", kemi))
+  kemitime_seinastu
+} else {
+  cat("- eingi úrslit")
+}
+```
+
+### Ringsýni frá ár `r kemi`
+```{r kemiRSar, out.width="80%", fig.cap="Tíðarseria av kopar (Cu), gløðitap (LOI) og sink (Zn) í ringsýnunum"}
+if(max(urslitkemi %>% filter(stodslag_id == "RS") %>% .$year)>kemi) {
+  kemisRS_seinastu <- kemiRS +
+    scale_x_date(limits = c(as.Date(ISOdate(kemi, 1,1)), NA))
+} else {
+  cat("- eingi úrslit")
+}
+```
+
+
+```{r kemiRSeindar, out.width="80%", fig.cap="Tíðarseria av kopar (Cu), gløðitap (LOI) og sink (Zn) í ringsýnunum pr. alieind"}
+if(max(urslitkemi %>% filter(stodslag_id == "RS") %>% .$year)>kemi) {
+  kemisRSeind_seinastu <- kemiRSeind +
+    scale_x_date(limits = c(as.Date(ISOdate(kemi, 1,1)), NA))
+} else {
+  cat("- eingi úrslit")
+}
+
+```
+
+```{r arRS, out.width="80%", fig.cap="Tíðarseria av kopar (Cu), gløðitap (LOI) og sink (Zn) í ringsýnunum, a) vísir ringsýnini (rundingar) og miðal fyri kanningina (fýrkantar) og í b) eru ringsýnini lita eftir alieind"}
+if(max(urslitkemi %>% filter(stodslag_id == "RS") %>% .$year)>kemi) {
+  a <- kemisRS_seinastu +
+    ggtitle(paste(alioki, "- Ringsýni, frá", kemi))
+  b <- kemisRSeind_seinastu +
+    ggtitle(paste(alioki, "- Ringsýni pr. alieind, frá", kemi))
+  
+  ggpubr::ggarrange(a,b, labels = c("a)", "b)"))
+} else {
+  cat("- eingi úrslit")
+}
+
+```
+
+
+```{r message=FALSE, warning=FALSE, include=FALSE, results='hide'}
+#talvur sum skulu skrivast til excelfíl
+
+dfwrite <- list(alara1, ali_lyklatol, urslitbotnl, urslitkemi, urslitsens1, kemimean, sensmean, urslitdjoreinkul,
+                urslitdjoraliv)
+dfname <- c("rakstrartol", "rakstrartol_lyklatol", "urs_botnlysing", "urs_kemi", "urs_sensorisk", "urs_kemi_midal", "urs_sensorisk_midal", "urs_djoreinkul", "urs_djoraliv")
+
+dfdata <- tibble(dfwrite, dfname) %>% 
+  mutate(path = paste("data_output/", alioki, "-", dfname, ".csv", sep = ""))
+
+
+walk2(dfdata$dfwrite, dfdata$path, write_excel_csv2, na = "")
+
+```
+

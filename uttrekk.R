@@ -1,0 +1,68 @@
+
+
+
+#her skrivar tú hvat fyri aliøki tú skal hyggja at
+alioki <- "A21"
+
+#her skrivar tú hvussu nógvar útsetur tú skal hyggja at
+utsetur <- 3
+
+#her skrivar tú nær tú ynskir kemiskar kanningar vístar frá í síðstu plottinum
+kemi <- 2014
+
+
+#her skrivar tú um tú ynskir úttrekkið sum, "pdf" ella "html"
+type <- "html"
+
+
+
+# trýst so á ctrl + alt + r (allar í senn) so byrjar koyringin
+# - tú verður biðin um at inntøppa títt brúkaranavn og loyniorð til postgres tá koyringin byrjar
+# hald eyga við console vindeyganum, har koma feilmeldingar um nakrar eru!
+
+
+
+
+
+
+#----------
+#ikki broyta nakað niðanfyri her!!!!
+
+if(type == "pdf") {
+  out <- "bookdown::pdf_document2"
+} else if (type == "html") {
+  out <- "bookdown::html_document2"
+} else {
+  stop("Hevur tú skrivað rætt í type? pdf ella html?")
+}
+
+if(dir.exists("rapportir") == FALSE) {dir.create("rapportir")}
+if(dir.exists("data_output") == FALSE) {dir.create("data_output")}
+
+#packages required
+uttrekk_pack <- c("tidyverse", "lubridate", "shiny", "odbc", "knitr", "kableExtra", "ggforce")
+mangla <- uttrekk_pack[!uttrekk_pack %in% installed.packages()[,"Package"]]
+if(!is.null(nrow(mangla))) {stop(paste("\n \n Tú manglar at installera package/s:", mangla))}
+
+rmarkdown::render("RapportUppsamlingAlioki.Rmd", params = list(
+  alioki = alioki,
+  server = rstudioapi::showPrompt(title = "Server", message = "Server navn:", default = ""),
+  database = rstudioapi::showPrompt(title = "Database", message = "Database navn:", default = ""),
+  user = rstudioapi::showPrompt("Database username", "username"),
+  loyniord = rstudioapi::askForPassword("Database password"),
+  kemi = kemi,
+  lev = utsetur
+),
+output_format = out,
+output_file = paste("rapportir/",alioki, "-", format(Sys.Date(), "%y%m%d"), ".", type, sep = ""), envir = new.env()
+)
+
+filestodelete <- tibble(files = intersect(list.files(path = "rapportir", pattern = alioki), list.files(path = "rapportir", pattern = type))) %>% 
+  arrange(desc(files)) %>% 
+  slice(-1) %>% 
+  mutate(files = paste("rapportir/", files, sep = ""))
+filestodelete <- as.vector(filestodelete$files)
+
+file.remove(filestodelete)
+
+rm(list = ls())
