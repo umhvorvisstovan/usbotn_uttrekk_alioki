@@ -100,13 +100,13 @@ developing <- FALSE
 
 if(developing == TRUE){
   con <- dbConnect(odbc::odbc(), Driver = "PostgreSQL Unicode(x64)", 
-                   server = rstudioapi::showPrompt(title = "Server", message = "Server navn:", default = ""),
-                   database = rstudioapi::showPrompt(title = "Database", message = "Database navn:", default = ""),
-                   UID = rstudioapi::showPrompt("Database username", "username"),
-                   PWD = rstudioapi::askForPassword("Database password"),
+                   Server = Sys.getenv("SERVER"),
+                   Database = Sys.getenv("DATABASE"),
+                   UID = Sys.getenv("USER"),
+                   PWD = Sys.getenv("PASSWORD"),
                    Port = 5432,
                    encoding = "windows-1252")
-  alioki <- "A11"
+  alioki <- "A39"
   lev <- 3
   utsetur <- 3
   kemi <- 2014
@@ -249,7 +249,7 @@ ringpos <- ringpos %>%
   mutate(year = lubridate::year(synistoku_dato))
 
 
-#heinta sensorisku úrslitini
+#datawrangling av sensorisku úrslitini
 urslitsens1 <- urslitsens %>% 
   mutate(lng = abs(lng)*-1) %>% 
   mutate(year = lubridate::year(synistoku_dato)) %>% 
@@ -322,6 +322,10 @@ urslitdjoraliv <- urslitdjoraliv %>%
   mutate(kanningy = paste(year, ifelse(utgava_slag == "ALIAU", "*", ""))) %>%
   arrange(synistoku_dato)
 
+#heinta taxontree view, djorslag og rank úr dátugrunninum
+taxontree <- tbl(con, "taxontree") %>% collect()
+djorslag <- tbl(con, "djorslag") %>% collect()
+rank <- tbl(con, "taxonrank") %>% collect()
 
 #heinta tøl úr aliskipan talvuni
 #hetta skal liggja í databasanum í framtíðini!!!
@@ -331,14 +335,19 @@ filenameforsogn <- paste("data/UrAliskipan/", alioki, "forsogn.xlsx", sep = "")
 library(readxl)
 
 #innles rakstrartøl
-rakstrartol <- read_excel(filename, 
-                          col_types = c("date", "numeric", "numeric", 
-                                        "numeric", "numeric", "numeric", 
-                                        "numeric", "numeric", "numeric", 
-                                        "numeric", "numeric", "numeric", 
-                                        "numeric", "numeric", "numeric", 
-                                        "numeric", "numeric", "numeric", 
-                                        "numeric", "numeric"))
+
+if(file.exists(filename)){
+  rakstrartol <- read_excel(filename, 
+                            col_types = c("date", "numeric", "numeric", 
+                                          "numeric", "numeric", "numeric", 
+                                          "numeric", "numeric", "numeric", 
+                                          "numeric", "numeric", "numeric", 
+                                          "numeric", "numeric", "numeric", 
+                                          "numeric", "numeric", "numeric", 
+                                          "numeric", "numeric"))
+} else {
+  rakstrartol <- read_excel("data/UrAliskipan/mastersheetAliskipan.xlsx")
+}
 
 rakstrartol <- rakstrartol %>% 
   rename(ali_date = 'Mánaður',
@@ -418,87 +427,97 @@ if(file.exists(filenameforsogn)) {
   yvirlapp <- FALSE
 }
 
-alara <- aliskipan %>% 
-  mutate(ali_date = as.Date(ali_date)) %>% 
-  complete(ali_date = seq.Date(min(ali_date) %m-% months(1), enddate, by = "month")) %>% 
-  arrange(ali_date) %>% 
-  fill(tol) %>% 
-  mutate(biomassi_ultimo_kg = if_else(is.na(biomassi_ultimo_kg), 0, biomassi_ultimo_kg))%>%
-  mutate(biomassi_vokstur_kg = if_else(is.na(biomassi_vokstur_kg), 0, biomassi_vokstur_kg))%>%
-  mutate(fodur_kg = if_else(is.na(fodur_kg), 0, fodur_kg))%>%
-  mutate(year = lubridate::year(ali_date))
-
-#finna nær ein útseta er byrja
-alarautseta <- alara %>% 
-  filter(biomassi_ultimo_kg == 0 & fodur_kg == 0) %>% 
-  arrange(ali_date) %>% 
-  mutate(ali_date = (ali_date) %m+% months(1))
-
-alarautseta <- alara %>% 
-  filter(ali_date %in% alarautseta$ali_date) %>% 
-  filter(!biomassi_ultimo_kg == 0) %>% 
-  filter(!(utsett_stk ==0 & flutt_i_stk == 0))
-
-alara1 <- alara %>% 
-  arrange(ali_date) %>% 
-  mutate(utseta = cut(ali_date, breaks = c(alarautseta$ali_date, Inf))) %>% 
-  group_by(utseta) %>% 
-  mutate(sumfodur = cumsum(fodur_kg),
-         sumfodur = if_else(fodur_kg == 0, 0, sumfodur),
-         sumfodur90 = max(sumfodur)*0.9,
-         sumvoksturbio = cumsum(biomassi_vokstur_kg),
-         sumvoksturbio = if_else(biomassi_vokstur_kg <= 0, 0, sumvoksturbio),
-         maxbio = max(biomassi_ultimo_kg),
-         maxtal = max(tal_stk),
-         totalfodur = max(max(sumfodur)),
-         flutt_utsett_stk = ifelse(flutt_i_stk == 0, NA_real_, flutt_i_stk-flutt_ur_stk),
-         flutt_utsett_kg = ifelse(flutt_i_kg == 0, NA_real_, flutt_i_kg-flutt_ur_kg),
-         stodd_flutt = ifelse(flutt_utsett_stk <= 0, NA_real_, flutt_utsett_kg/flutt_utsett_stk),
-         stodd_utsett = ifelse(utsett_stk == 0, NA_real_, utsett_kg/utsett_stk),
-         stodd_tikid = ifelse(slatur_stk == 0, NA_real_, slatur_kg/slatur_stk),) %>% 
-  filter(!is.na(tol))
-
-#hetta er ógvuliga tollut!! skuldi bara filtrera forsøgnartølini út tá summar verða útroknaðir
-#høvdið riggaði ikki meira nú kl 22:24 :)
-alara2 <- alara %>% 
-  arrange(ali_date) %>% 
-  mutate(utseta = cut(ali_date, breaks = c(alarautseta$ali_date, Inf))) %>%
-  ##hetta filtri er tað sum er lagt afturat
-  filter(if(yvirlapp==TRUE) tol == "Rakstur" else tol !="einki") %>%
-  group_by(utseta) %>% 
-  mutate(sumfodur = cumsum(fodur_kg),
-         sumfodur = if_else(fodur_kg == 0, 0, sumfodur),
-         sumfodur90 = max(sumfodur)*0.9,
-         sumvoksturbio = cumsum(biomassi_vokstur_kg),
-         sumvoksturbio = if_else(biomassi_vokstur_kg <= 0, 0, sumvoksturbio),
-         maxbio = max(biomassi_ultimo_kg),
-         maxtal = max(tal_stk),
-         totalfodur = max(max(sumfodur)),
-         flutt_utsett_stk = ifelse(flutt_i_stk == 0, NA_real_, flutt_i_stk-flutt_ur_stk),
-         flutt_utsett_kg = ifelse(flutt_i_kg == 0, NA_real_, flutt_i_kg-flutt_ur_kg),
-         stodd_flutt = ifelse(flutt_utsett_stk <= 0, NA_real_, flutt_utsett_kg/flutt_utsett_stk),
-         stodd_utsett = ifelse(utsett_stk == 0, NA_real_, utsett_kg/utsett_stk),
-         stodd_tikid = ifelse(slatur_stk == 0, NA_real_, slatur_kg/slatur_stk),) %>% 
-  filter(!is.na(tol))
-
-alara90fod <- alara1 %>% 
-  group_by(utseta) %>% 
-  slice(which.min(abs(sumfodur-sumfodur90))) %>% 
-  filter(sumfodur != 0)
+if(nrow(aliskipan)>0) {
+  
+  alara <- aliskipan %>% 
+    mutate(ali_date = as.Date(ali_date)) %>% 
+    complete(ali_date = seq.Date(min(ali_date) %m-% months(1), enddate, by = "month")) %>% 
+    arrange(ali_date) %>% 
+    fill(tol) %>% 
+    mutate(biomassi_ultimo_kg = if_else(is.na(biomassi_ultimo_kg), 0, biomassi_ultimo_kg))%>%
+    mutate(biomassi_vokstur_kg = if_else(is.na(biomassi_vokstur_kg), 0, biomassi_vokstur_kg))%>%
+    mutate(fodur_kg = if_else(is.na(fodur_kg), 0, fodur_kg))%>%
+    mutate(year = lubridate::year(ali_date))
+  
+  #finna nær ein útseta er byrja
+  alarautseta <- alara %>% 
+    filter(biomassi_ultimo_kg == 0 & fodur_kg == 0) %>% 
+    arrange(ali_date) %>% 
+    mutate(ali_date = (ali_date) %m+% months(1))
+  
+  alarautseta <- alara %>% 
+    filter(ali_date %in% alarautseta$ali_date) %>% 
+    filter(!biomassi_ultimo_kg == 0) %>% 
+    filter(!(utsett_stk ==0 & flutt_i_stk == 0))
+  
+  alara1 <- alara %>% 
+    arrange(ali_date) %>% 
+    mutate(utseta = cut(ali_date, breaks = c(alarautseta$ali_date, Inf))) %>% 
+    group_by(utseta) %>% 
+    mutate(sumfodur = cumsum(fodur_kg),
+           sumfodur = if_else(fodur_kg == 0, 0, sumfodur),
+           sumfodur90 = max(sumfodur)*0.9,
+           sumvoksturbio = cumsum(biomassi_vokstur_kg),
+           sumvoksturbio = if_else(biomassi_vokstur_kg <= 0, 0, sumvoksturbio),
+           maxbio = max(biomassi_ultimo_kg),
+           maxtal = max(tal_stk),
+           totalfodur = max(max(sumfodur)),
+           flutt_utsett_stk = ifelse(flutt_i_stk == 0, NA_real_, flutt_i_stk-flutt_ur_stk),
+           flutt_utsett_kg = ifelse(flutt_i_kg == 0, NA_real_, flutt_i_kg-flutt_ur_kg),
+           stodd_flutt = ifelse(flutt_utsett_stk <= 0, NA_real_, flutt_utsett_kg/flutt_utsett_stk),
+           stodd_utsett = ifelse(utsett_stk == 0, NA_real_, utsett_kg/utsett_stk),
+           stodd_tikid = ifelse(slatur_stk == 0, NA_real_, slatur_kg/slatur_stk),) %>% 
+    filter(!is.na(tol))
+  
+  #hetta er ógvuliga tollut!! skuldi bara filtrera forsøgnartølini út tá summar verða útroknaðir
+  #høvdið riggaði ikki meira nú kl 22:24 :)
+  alara2 <- alara %>% 
+    arrange(ali_date) %>% 
+    mutate(utseta = cut(ali_date, breaks = c(alarautseta$ali_date, Inf))) %>%
+    ##hetta filtri er tað sum er lagt afturat
+    filter(if(yvirlapp==TRUE) tol == "Rakstur" else tol !="einki") %>%
+    group_by(utseta) %>% 
+    mutate(sumfodur = cumsum(fodur_kg),
+           sumfodur = if_else(fodur_kg == 0, 0, sumfodur),
+           sumfodur90 = max(sumfodur)*0.9,
+           sumvoksturbio = cumsum(biomassi_vokstur_kg),
+           sumvoksturbio = if_else(biomassi_vokstur_kg <= 0, 0, sumvoksturbio),
+           maxbio = max(biomassi_ultimo_kg),
+           maxtal = max(tal_stk),
+           totalfodur = max(max(sumfodur)),
+           flutt_utsett_stk = ifelse(flutt_i_stk == 0, NA_real_, flutt_i_stk-flutt_ur_stk),
+           flutt_utsett_kg = ifelse(flutt_i_kg == 0, NA_real_, flutt_i_kg-flutt_ur_kg),
+           stodd_flutt = ifelse(flutt_utsett_stk <= 0, NA_real_, flutt_utsett_kg/flutt_utsett_stk),
+           stodd_utsett = ifelse(utsett_stk == 0, NA_real_, utsett_kg/utsett_stk),
+           stodd_tikid = ifelse(slatur_stk == 0, NA_real_, slatur_kg/slatur_stk),) %>% 
+    filter(!is.na(tol))
+  
+  alara90fod <- alara1 %>% 
+    group_by(utseta) %>% 
+    slice(which.min(abs(sumfodur-sumfodur90))) %>% 
+    filter(sumfodur != 0)
+  
+}
 
 #heinta djóralívskanningar úr databasu
-djoralivsyni <- tbl(con, "djoralivsyni") %>% 
+djoralivsynifjord <- tbl(con, "djoralivsyni") %>% 
   left_join(tbl(con, "botnsyni"), by = "botn_id") %>% 
-  left_join(tbl(con, "kanningarrapport"), by = "rap_id") %>% 
+  left_join(tbl(con, "kanningarrapport"), by = "rap_id") %>%
+  left_join(tbl(con, "alioki"), by = c("alioki_id" = "alioki_nr")) %>% 
+  left_join(tbl(con, "alifjord"), by = "alifjord_nr") %>% 
   mutate(lng = if_else(is.na(lng.x), plan_lng, lng.x),
          lat = if_else(is.na(lat.x), plan_lat, lat.x)) %>%
   mutate(lng = if_else(is.na(lng.y), lng.x, lng.y),
          lat = if_else(is.na(lat.y), lat.x, lat.y)) %>%
+  filter(alifjord_nr == alifjord_nrr) %>% 
   collect()
-djoralivsyni <- djoralivsyni %>% 
+
+djoralivsynifjord <- djoralivsynifjord %>% 
   mutate(year = lubridate::year(synistoku_dato)) %>% 
   mutate(lng = abs(lng)*-1) %>% 
-  arrange(synistoku_dato) %>% 
+  arrange(synistoku_dato)
+
+djoralivsyni <- djoralivsynifjord %>%
   filter(alioki_id == alioki)
 
 #disconnect from database
@@ -605,103 +624,125 @@ Ein markering (*) á útsetuni merkir, at fiskur varð ikki útsettur á aliøki
 
 
 ```{r lyklatol1}
-ali_lyklatol <- alara2 %>% 
-  filter(!is.na(utseta)) %>%
-  filter(if(yvirlapp==TRUE) tol == "Rakstur" else tol !="einki") %>%
-  group_by(tol, utseta, maxbio, totalfodur) %>% 
-  summarise(utseting_byrja = min(ali_date[!is.na(utsett_stk) & utsett_stk >0]),
-            utseting_endad = max(ali_date[!is.na(utsett_stk) & utsett_stk >0]),
-            maxbio_dato = max(ali_date[biomassi_ultimo_kg == maxbio]),
-            fluttseting_byrja = min(ali_date[!is.na(flutt_utsett_stk) & flutt_utsett_stk >0]),
-            fluttseting_endad = max(ali_date[!is.na(flutt_utsett_stk) & flutt_utsett_stk >0]),
-            utseting_flyting_byrja = if_else(!is.finite(utseting_byrja), 
-                                             fluttseting_byrja, utseting_byrja),
-            utseting_flyting_endad = if_else(!is.finite(utseting_endad), 
-                                             fluttseting_endad, utseting_endad),
-            utseta_endar = min(ali_date[sumfodur == 0]),
-            n_utsett = sum(utsett_stk, na.rm = TRUE),
-            n_flutt = sum(flutt_utsett_stk[flutt_utsett_stk >0], na.rm = TRUE),
-            n_utsett_flutt = ifelse(is.na(n_utsett) | n_utsett == 0, 
-                                    n_flutt, n_utsett),
-            utsett_ella_flutt = ifelse(is.na(n_utsett) | n_utsett == 0, 
-                                       "*", " "),
-            n_flutt_i = sum(flutt_i_stk, na.rm = TRUE),
-            n_flutt_ur = sum(flutt_ur_stk, na.rm = TRUE),
-            kg_flutt_i = sum(flutt_i_kg, na.rm = TRUE),
-            kg_flutt_ur = sum(flutt_ur_kg, na.rm = TRUE),
-            stodd_utsett = ifelse(is.na(mean(stodd_utsett[stodd_utsett<3], na.rm = TRUE)),
-                                  round(mean(stodd_flutt, na.rm = TRUE),3),
-                                  round(mean(stodd_utsett[stodd_utsett<3], na.rm = TRUE),3)),
-            fiskur_fluttur = if_else(!is.na(n_flutt_i) | !is.na(n_flutt_ur), TRUE, FALSE),
-            n_sloppi = sum(sloppid_stk, na.rm = TRUE),
-            n_felli = sum(felli_stk, na.rm = TRUE),
-            felli_perc = ifelse(n_utsett ==0,
-                                round(n_felli/(n_flutt_i-n_flutt_ur)*100,1),
-                                round(n_felli/n_utsett*100,1)),
-            n_gingi = n_utsett_flutt-n_flutt_ur+n_flutt_i-n_felli-n_sloppi,
-            voksturbio = sum(biomassi_vokstur_kg, na.rm = TRUE),
-            mdr_aling = sum(sumfodur > 0),
-            mdr_brakk = sum(sumfodur == 0),
-            n_tikid = sum(slatur_stk, na.rm = TRUE),
-            kg_tikid = sum(slatur_kg, na.rm = TRUE),
-            stodd_tikid = round(mean(stodd_tikid[stodd_tikid<12], na.rm = TRUE),3)
-  ) %>%
-  mutate(mdr_brakk = ifelse(tol == "Forsøgn", NA, mdr_brakk),
-         voksturbio = ifelse(tol == "Forsøgn" & voksturbio == 0, NA, voksturbio),
-         utseta_navn = paste(utseta, utsett_ella_flutt))
-
-tol1 <- ali_lyklatol %>% 
-  ungroup() %>% 
-  select(utseta_navn, utseting_flyting_byrja, utseting_flyting_endad,
-         utseta_endar, mdr_aling, mdr_brakk) %>% 
-  rename("Útseta" = utseta_navn,
-         "Útseting byrjar" = utseting_flyting_byrja,
-         "Útseting endar" = utseting_flyting_endad,
-         "Útseta endar" = utseta_endar,
-         "Aling (mðr)" = mdr_aling,
-         "Brakkligið (mðr)" = mdr_brakk)
+if(nrow(aliskipan)>0){
+  ali_lyklatol <- alara2 %>% 
+    filter(!is.na(utseta)) %>%
+    filter(if(yvirlapp==TRUE) tol == "Rakstur" else tol !="einki") %>%
+    group_by(tol, utseta, maxbio, totalfodur) %>% 
+    summarise(utseting_byrja = min(ali_date[!is.na(utsett_stk) & utsett_stk >0]),
+              utseting_endad = max(ali_date[!is.na(utsett_stk) & utsett_stk >0]),
+              maxbio_dato = max(ali_date[biomassi_ultimo_kg == maxbio]),
+              fluttseting_byrja = min(ali_date[!is.na(flutt_utsett_stk) & flutt_utsett_stk >0]),
+              fluttseting_endad = max(ali_date[!is.na(flutt_utsett_stk) & flutt_utsett_stk >0]),
+              utseting_flyting_byrja = if_else(!is.finite(utseting_byrja), 
+                                               fluttseting_byrja, utseting_byrja),
+              utseting_flyting_endad = if_else(!is.finite(utseting_endad), 
+                                               fluttseting_endad, utseting_endad),
+              utseta_endar = min(ali_date[sumfodur == 0]),
+              n_utsett = sum(utsett_stk, na.rm = TRUE),
+              n_flutt = sum(flutt_utsett_stk[flutt_utsett_stk >0], na.rm = TRUE),
+              n_utsett_flutt = ifelse(is.na(n_utsett) | n_utsett == 0, 
+                                      n_flutt, n_utsett),
+              utsett_ella_flutt = ifelse(is.na(n_utsett) | n_utsett == 0, 
+                                         "*", " "),
+              n_flutt_i = sum(flutt_i_stk, na.rm = TRUE),
+              n_flutt_ur = sum(flutt_ur_stk, na.rm = TRUE),
+              kg_flutt_i = sum(flutt_i_kg, na.rm = TRUE),
+              kg_flutt_ur = sum(flutt_ur_kg, na.rm = TRUE),
+              stodd_utsett = ifelse(is.na(mean(stodd_utsett[stodd_utsett<3], na.rm = TRUE)),
+                                    round(mean(stodd_flutt, na.rm = TRUE),3),
+                                    round(mean(stodd_utsett[stodd_utsett<3], na.rm = TRUE),3)),
+              fiskur_fluttur = if_else(!is.na(n_flutt_i) | !is.na(n_flutt_ur), TRUE, FALSE),
+              n_sloppi = sum(sloppid_stk, na.rm = TRUE),
+              n_felli = sum(felli_stk, na.rm = TRUE),
+              felli_perc = ifelse(n_utsett ==0,
+                                  round(n_felli/(n_flutt_i-n_flutt_ur)*100,1),
+                                  round(n_felli/n_utsett*100,1)),
+              n_gingi = n_utsett_flutt-n_flutt_ur+n_flutt_i-n_felli-n_sloppi,
+              voksturbio = sum(biomassi_vokstur_kg, na.rm = TRUE),
+              mdr_aling = sum(sumfodur > 0),
+              mdr_brakk = sum(sumfodur == 0),
+              n_tikid = sum(slatur_stk, na.rm = TRUE),
+              kg_tikid = sum(slatur_kg, na.rm = TRUE),
+              stodd_tikid = round(mean(stodd_tikid[stodd_tikid<12], na.rm = TRUE),3)
+    ) %>%
+    mutate(mdr_brakk = ifelse(tol == "Forsøgn", NA, mdr_brakk),
+           voksturbio = ifelse(tol == "Forsøgn" & voksturbio == 0, NA, voksturbio),
+           utseta_navn = paste(utseta, utsett_ella_flutt))
+  
+  tol1 <- ali_lyklatol %>% 
+    ungroup() %>% 
+    select(utseta_navn, utseting_flyting_byrja, utseting_flyting_endad,
+           utseta_endar, mdr_aling, mdr_brakk) %>% 
+    rename("Útseta" = utseta_navn,
+           "Útseting byrjar" = utseting_flyting_byrja,
+           "Útseting endar" = utseting_flyting_endad,
+           "Útseta endar" = utseta_endar,
+           "Aling (mðr)" = mdr_aling,
+           "Brakkligið (mðr)" = mdr_brakk)
+} else {
+  tol1 <- data.frame("Útseta" = c("Eingi rakstrartøl tøk"))
+}
 knitr::kable(tol1, caption = "Aling - Lyklatøl rakstri og forsøgn (1)", booktabs = T, align = c("l", "c", "c", "c", "r", "r")) %>% 
   kable_styling(bootstrap_options = c("condensed"), full_width = F) %>% 
   kable_styling(latex_options = c("hold_position"))
+
 ```
 
 ```{r lyklatol2}
-tol2 <- ali_lyklatol %>% 
-  ungroup() %>% 
-  select(utseta_navn, n_utsett_flutt, stodd_utsett, n_felli, felli_perc, n_gingi) %>% 
-  rename("Útseta" = utseta_navn,
-         "Fiskur útsettur (stk)" = n_utsett_flutt,
-         "Miðal stødd útsett (kg)" = stodd_utsett,
-         "Felli (stk)" = n_felli,
-         "Felli (%)" = felli_perc,
-         "Fiskur gingið (stk)" = n_gingi)
+if(nrow(aliskipan) > 0) {
+  
+  tol2 <- ali_lyklatol %>% 
+    ungroup() %>% 
+    select(utseta_navn, n_utsett_flutt, stodd_utsett, n_felli, felli_perc, n_gingi) %>% 
+    rename("Útseta" = utseta_navn,
+           "Fiskur útsettur (stk)" = n_utsett_flutt,
+           "Miðal stødd útsett (kg)" = stodd_utsett,
+           "Felli (stk)" = n_felli,
+           "Felli (%)" = felli_perc,
+           "Fiskur gingið (stk)" = n_gingi)
+} else {
+  tol2 <- tol1
+}
 knitr::kable(tol2, caption = "Aling - Lyklatøl rakstri og forsøgn (2)", booktabs = T) %>% 
   kable_styling(bootstrap_options = c("condensed"), full_width = F) %>% 
   kable_styling(latex_options = c("hold_position"))
 ```
 
 ```{r lyklatol3}
-tol3 <- ali_lyklatol %>% 
-  ungroup() %>% 
-  select(utseta_navn, maxbio_dato, maxbio, voksturbio, totalfodur) %>% 
-  rename("Útseta" = utseta_navn,
-         "Størst biomassi (mðr)" = maxbio_dato,
-         "Størst biomassi (kg)" = maxbio,
-         "Vøkstur biomassa (kg)" = voksturbio,
-         "Fóðurnýtsla (kg)" = totalfodur)
+if(nrow(aliskipan) > 0) {
+  
+  tol3 <- ali_lyklatol %>% 
+    ungroup() %>% 
+    select(utseta_navn, maxbio_dato, maxbio, voksturbio, totalfodur) %>% 
+    rename("Útseta" = utseta_navn,
+           "Størst biomassi (mðr)" = maxbio_dato,
+           "Størst biomassi (kg)" = maxbio,
+           "Vøkstur biomassa (kg)" = voksturbio,
+           "Fóðurnýtsla (kg)" = totalfodur)
+} else {
+  tol3 <- tol1
+}
+
 knitr::kable(tol3, caption = "Aling - Lyklatøl rakstri og forsøgn (3)", booktabs = T, align = c("l", "c", "r", "r", "r")) %>% 
   kable_styling(bootstrap_options = c("condensed"), full_width = F) %>% 
   kable_styling(latex_options = c("hold_position"))
 ```
 
 ```{r lyklatol4}
-tol4 <- ali_lyklatol %>% 
-  ungroup() %>% 
-  select(utseta_navn, n_tikid, kg_tikid, stodd_tikid) %>% 
-  rename("Útseta" = utseta_navn,
-         "fiskur tikin (stk)" = n_tikid,
-         "fiskur tikin (kg)" = kg_tikid,
-         "Miðal vekt (kg)" = stodd_tikid)
+if(nrow(aliskipan) > 0) {
+  
+  tol4 <- ali_lyklatol %>% 
+    ungroup() %>% 
+    select(utseta_navn, n_tikid, kg_tikid, stodd_tikid) %>% 
+    rename("Útseta" = utseta_navn,
+           "fiskur tikin (stk)" = n_tikid,
+           "fiskur tikin (kg)" = kg_tikid,
+           "Miðal vekt (kg)" = stodd_tikid)
+  
+} else {
+  tol4 <- tol1
+}
 knitr::kable(tol4, caption = "Aling - Lyklatøl rakstri og forsøgn (4)", booktabs = T) %>% 
   kable_styling(bootstrap_options = c("condensed"), full_width = F) %>% 
   kable_styling(latex_options = c("hold_position"))
@@ -783,35 +824,47 @@ Sí Figure \@ref(fig:alitol).
 library(ggrepel)
 
 #TODO: møguliga seta eitt maks á hvussu stórt plottið kann verða eftir x-ásanum, og so deila tað í tvey ella fleiri
-xmin <- min(min(alara1$ali_date), min(urslitsens1$synistoku_dato), min(urslitkemi$synistoku_dato))
-xmax <- max(max(alara1$ali_date), max(urslitsens1$synistoku_dato), max(urslitkemi$synistoku_dato))
+xmin <- if(nrow(aliskipan)>0){
+  min(min(alara1$ali_date), min(urslitsens1$synistoku_dato), min(urslitkemi$synistoku_dato))
+} else {
+  min(min(urslitsens1$synistoku_dato), min(urslitkemi$synistoku_dato))
+}
+
+xmax <- if(nrow(aliskipan)>0){
+  max(max(alara1$ali_date), max(urslitsens1$synistoku_dato), max(urslitkemi$synistoku_dato))
+} else {
+  max(max(urslitsens1$synistoku_dato), max(urslitkemi$synistoku_dato))
+}
+
 synidato <- sensmean %>% group_by(utgava_dato) %>% summarise(synistoku_dato = max(synistoku_dato))
 
 #hetta er plottið við rakstrartølunum
-alaratol <- ggplot() +
-  geom_line(data = alara1,
-            aes(x = ali_date, y = biomassi_ultimo_kg/1000000, colour = "Biomassi", linetype = tol)) +
-  geom_line(data = alara1,
-            aes(x = ali_date, y = sumfodur/1000000, colour = "Samlaða fóður nøgdin", linetype = tol)) +
-  geom_segment(data = synidato, aes(x = synistoku_dato, xend = synistoku_dato, 
-                                    y = 0, yend = Inf), colour = "grey80",
-               linetype = 3, show.legend = FALSE) +
-  ylab(expression(10^6~kg)) +
-  coord_cartesian(xlim = c(xmin, xmax)) +
-  scale_x_date(breaks = "2 years", date_labels = "%Y") +
-  scale_color_manual(values = c("dodgerblue3", "magenta"), name = "Rakstrartøl") +
-  scale_linetype_discrete(name = element_blank()) +
-  scale_y_continuous()+
-  guides(color = guide_legend(order = 1),
-         linetype = guide_legend(order = 2))+
-  theme_minimal()+
-  geom_hline(yintercept = 0)+
-  theme(axis.title.x = element_blank(),
-        legend.key.size = unit(4, "pt"),
-        plot.margin = unit(c(2,0,0,0), "pt"),
-        axis.ticks.length.x.top = unit(0, "pt"),
-        legend.justification = "left",
-        axis.text.x = element_text(angle = 45, hjust = 1))
+if(nrow(aliskipan)>0) {
+  alaratol <- ggplot() +
+    geom_line(data = alara1,
+              aes(x = ali_date, y = biomassi_ultimo_kg/1000000, colour = "Biomassi", linetype = tol)) +
+    geom_line(data = alara1,
+              aes(x = ali_date, y = sumfodur/1000000, colour = "Samlaða fóður nøgdin", linetype = tol)) +
+    geom_segment(data = synidato, aes(x = synistoku_dato, xend = synistoku_dato, 
+                                      y = 0, yend = Inf), colour = "grey80",
+                 linetype = 3, show.legend = FALSE) +
+    ylab(expression(10^6~kg)) +
+    coord_cartesian(xlim = c(xmin, xmax)) +
+    scale_x_date(breaks = "2 years", date_labels = "%Y") +
+    scale_color_manual(values = c("dodgerblue3", "magenta"), name = "Rakstrartøl") +
+    scale_linetype_discrete(name = element_blank()) +
+    scale_y_continuous()+
+    guides(color = guide_legend(order = 1),
+           linetype = guide_legend(order = 2))+
+    theme_minimal()+
+    geom_hline(yintercept = 0)+
+    theme(axis.title.x = element_blank(),
+          legend.key.size = unit(4, "pt"),
+          plot.margin = unit(c(2,0,0,0), "pt"),
+          axis.ticks.length.x.top = unit(0, "pt"),
+          legend.justification = "left",
+          axis.text.x = element_text(angle = 45, hjust = 1))
+}
 
 #hetta er plotti við dagfestingunum!
 #TODO: brúka label repel, so at tað ikki er yvirplotting
@@ -925,8 +978,13 @@ meanEvni <- ggplot(data = kemimean %>% filter(evni %in% kemi3) %>%
         legend.justification = "left")
 
 #her verða plottini samplaði í eitt stórt plott
-ggpubr::ggarrange(synistoka, alieindir, meansens, meankem, meanEvni, alaratol, ncol = 1, align = "v",
-                  heights = c(0.5, 0.2, 0.5, 0.5, 0.25, 1))
+if(nrow(aliskipan)>0){
+  ggpubr::ggarrange(synistoka, alieindir, meansens, meankem, meanEvni, alaratol, ncol = 1, align = "v",
+                    heights = c(0.5, 0.2, 0.5, 0.5, 0.25, 1))
+} else {
+  ggpubr::ggarrange(synistoka, alieindir, meansens, meankem, meanEvni, ncol = 1, align = "v",
+                    heights = c(0.5, 0.2, 0.5, 0.5, 0.25))
+}
 ```
 
 
@@ -973,8 +1031,12 @@ ggpubr::ggarrange(synistoka, alieindir, meansens, meankem, meanEvni, alaratol, n
 
 ```{r kortrs, out.width='100%', fig.cap="Positiónirnar á ringsýnunum tær seinastu útseturnar"}
 dfkort <- urslitsens1
-dfkort <- dfkort %>% 
-  filter(synistoku_dato > min(alarautseta$ali_date %>% tail(lev))) 
+
+# filtrera til tal av seinastu útsetum ásett í lev, um eingin raksrartøl eru, vís alt
+if(nrow(aliskipan)>0){
+  dfkort <- dfkort %>% 
+    filter(synistoku_dato > min(alarautseta$ali_date %>% tail(lev)))
+}
 dfk <- dfkort %>% 
   filter(stodslag_id == "RS") %>% filter(utgava_slag != "ALIAU") #tekur áðrenn útsetu kanningar úr
 
@@ -1001,7 +1063,12 @@ ringsynifacet <-ringsyni +
   facet_grid(.~year) +
   ggtitle(paste(alioki, " - Ringsýni tær seinastu ", utsetur,". útseturnar", sep = ""))
 
-ggpubr::ggarrange(ringsynifacet, ringsyni, nrow = 2, heights = c(1,1.85))
+if(nrow(dfk)>0) {
+  ggpubr::ggarrange(ringsynifacet, ringsyni, nrow = 2, heights = c(1,1.85))  
+} else {
+  print("Vantandi Dátur")
+}
+
 ```
 
 
@@ -1044,7 +1111,7 @@ senskortfacet <- bakgrundskort_simp +
   scale_shape(name =  "Støðslag") +
   guides(col = guide_legend(override.aes = list(shape = 15, size = 3)))+
   guides(shape = guide_legend(override.aes = list(size = 2))) +
-  facet_wrap_paginate(~kanning, ncol = colfacet, nrow = rowfacet, page = 1) +
+  facet_wrap(~kanning, ncol = colfacet, nrow = rowfacet) +
   coord_sf(xlim = xlim, ylim = ylim)+
   theme_minimal() +
   bakgrundbla +
@@ -1120,8 +1187,11 @@ senstimetime
 #hetta skal justerast tá fleiri kanningar koma og fóður og skarn eru hvør sín variabul
 
 dfkort <- urslitbotnl
-dfkort <- dfkort %>% 
-  filter(synistoku_dato > min(alarautseta$ali_date %>% tail(lev)))
+
+if(nrow(aliskipan)>0){
+  dfkort <- dfkort %>% 
+    filter(synistoku_dato > min(alarautseta$ali_date %>% tail(lev)))
+}
 dfkort <- dfkort %>% 
   filter(botnlysing_id %in% c("fodur_skarn", "fodur", "skarn")) %>% 
   group_by(rap_id, botn_id, stodslag_id, lat, lng, kanning) %>% 
@@ -1158,7 +1228,7 @@ sensbotnl <- bakgrundskort_simp +
   guides(col = guide_legend(override.aes = list(shape = 15, size = 3)))+
   guides(shape = guide_legend(override.aes = list(size = 2))) +
   scale_shape(name =  "Støðslag") +
-  facet_wrap_paginate(~kanning, ncol = colfacet, nrow = rowfacet, page = 1) +
+  facet_wrap(~kanning, ncol = colfacet, nrow = rowfacet) +
   coord_sf(xlim = xlim, 
            ylim = ylim, expand = TRUE)+
   theme_minimal() +
@@ -1184,8 +1254,11 @@ if(n > 1) {
 
 ```{r kortdjoreinfold1, out.width='100%', fig.cap="Einfaldar djóralívskanningar, tindadýr, krabbadýr og lindýr"}
 dfkort <- urslitdjoreinkul
-dfkort <- dfkort %>% 
-  filter(synistoku_dato > min(alarautseta$ali_date %>% tail(lev)))
+
+if(nrow(aliskipan)>0) {
+  dfkort <- dfkort %>% 
+    filter(synistoku_dato > min(alarautseta$ali_date %>% tail(lev)))
+}
 
 talrap <- length(unique(dfkort$rap_id))
 stodd <- ifelse(talrap > 6, 0.8, 1)
@@ -1244,8 +1317,11 @@ if(n > 1) {
 
 ```{r kortdjoreinfold2, out.width='100%', fig.cap="Einfaldar djóralívskanningar, Malecoceros fuliginosus, Capitella capitata og arðir bustmaðkar. Capitella capitata gjørdist partur av kanningunum í 2017."}
 dfkort <- urslitdjoreinkul
-dfkort <- dfkort %>% 
-  filter(synistoku_dato > min(alarautseta$ali_date %>% tail(lev)))
+
+if(nrow(aliskipan)>0) {
+  dfkort <- dfkort %>% 
+    filter(synistoku_dato > min(alarautseta$ali_date %>% tail(lev)))
+}
 
 talrap <- length(unique(dfkort$rap_id))
 stodd <- ifelse(talrap > 6, 0.8, 1)
@@ -1311,8 +1387,11 @@ if(n > 1) {
 
 ```{r kortkemi, out.width='100%', fig.cap="Kopar (Cu), Gløðitap (LOI) og Sink (Zn)"}
 dfkort <- urslitkemi
-dfkort <- dfkort %>% 
-  filter(synistoku_dato > min(alarautseta$ali_date %>% tail(lev)))
+
+if(nrow(aliskipan)>0) {
+  dfkort <- dfkort %>% 
+    filter(synistoku_dato > min(alarautseta$ali_date %>% tail(lev)))
+}
 
 talrap <- length(unique(dfkort$rap_id))
 stodd <- ifelse(talrap > 6, 0.8, 1)
@@ -1525,9 +1604,156 @@ if(max(urslitkemi %>% filter(stodslag_id == "RS") %>% .$year)>kemi) {
 
 ```
 
+\newpage
+
+# Djóralívskanningar
+
+## Positiónir á djóralívssýnunum
+
+```{r kortdjorfjord, out.width='100%', fig.cap="Positiónirnar á djóralívssýnunum á alifjørðinum, fyri hvørt ár"}
+dfkort <- djoralivsynifjord %>% 
+  filter(!is.na(year)) 
+
+dfk <- dfkort 
+
+talrap <- length(unique(dfkort$rap_id))
+stodd <- ifelse(talrap > 5, 0.6, 1)
+
+djoralivfjord <- bakgrundskort_simp +
+  geom_sf(data = dyb, colour = dybcolour) +
+  geom_sf(data = alipoly, fill = NA, colour = "black", inherit.aes = FALSE) +
+  geom_point(data = dfk,
+             aes(y = lat, x = lng, 
+                 colour = factor(year)),
+             show.legend = TRUE,
+             alpha = 0.8,
+             size = stodd) +
+  coord_sf(xlim = c(min(dfk$lng, na.rm = TRUE), max(dfk$lng, na.rm = TRUE))+c(-0.005,0.005),
+           ylim = c(min(dfk$lat, na.rm = TRUE), max(dfk$lat, na.rm = TRUE))+c(-0.001,0.001),
+           expand = TRUE)+
+  scale_color_discrete(name = "Sýnistøku ár") +
+  guides(col = guide_legend(override.aes = list(shape = 15, size = 3)))+
+  theme_void() +
+  skrift + 
+  bakgrundbla
+
+
+djoralivfacetfjord <- djoralivfjord +
+  facet_wrap(~year) +
+  ggtitle(paste(alifjord_nrr, " - Sýnini tey seinastu árini", sep = "")) +
+  theme(legend.position = "none") +
+  bakgrundbla
+
+djoralivfacetfjord
+
+```
+
+
+```{r kortdjorfjordtogether, out.width='100%', fig.cap="Positiónirnar á djóralívssýnunum á alifjørðinum, øll árini"}
+djoralivfjord
+```
+
+
+```{r}
+#um man ynskir at lættari brúka taxon data í excel ella øðrum, ber til at nýta taxontree1 talvuna
+#hendan talvan verður gjørd í R
+
+taxonfilter <- function(df){ 
+  df %>% 
+    pull(scientific_name) %>% 
+    paste(., collapse = " |")
+}
+
+test <- taxontree %>% 
+  group_by(rankname) %>% 
+  nest() %>% 
+  mutate(taxons = map_chr(data, taxonfilter)) %>% 
+  select(-data) %>% 
+  ungroup()
+
+taxontree1 <- taxontree %>% 
+  filter(aphia_id %in% !! urslitdjoraliv$aphia_id) %>% 
+  mutate(ancestors1 = str_replace_all(ancestors, " ", "_"),
+         ancestors1 = str_replace_all(ancestors1, ",", " "),
+         ancestors1 = str_replace_all(ancestors1, "\\{", " "),
+         ancestors1 = str_replace_all(ancestors1, "\\}", " "),
+         phylum = str_extract(ancestors1, test %>% filter(rankname == "phylum") %>% select(taxons) %>% paste0()),
+         subphylum = str_extract(ancestors1, test %>% filter(rankname == "subphylum") %>% select(taxons) %>% paste0()),
+         class = str_extract(ancestors1, test %>% filter(rankname == "class") %>% select(taxons) %>% paste0()),
+         order = str_extract(ancestors1, test %>% filter(rankname == "order") %>% select(taxons) %>% paste0()),
+         family = str_extract(ancestors1, test %>% filter(rankname == "family") %>% select(taxons) %>% paste0()),
+         genus = str_extract(ancestors1, test %>% filter(rankname == "genus") %>% select(taxons) %>% paste0()),
+         species = str_extract(ancestors1, test %>% filter(rankname == "species") %>% select(taxons) %>% paste0())) %>% 
+  select(ancestors,phylum, subphylum, class, order, family, genus, aphia_id, rankname, scientific_name) %>%
+  arrange(ancestors)
+```
+
+
+## Úrslit frá seinastu djóralívskanning
+
+```{r}
+djor <- urslitdjoraliv %>% 
+  left_join(taxontree1) %>% 
+  select(djorliv_id, botn_id, grabba_nr, grabbavidd_m2.x, class, genus, scientific_name, rankname, aphia_id, tal)
+
+djor1 <- urslitdjoraliv %>% 
+  filter(kanningy == max(urslitdjoraliv$kanningy)) %>% 
+  left_join(taxontree1) %>% 
+  select(djorliv_id, botn_id, grabba_nr, grabbavidd_m2.x, class, genus, scientific_name, rankname, aphia_id, tal)
+
+djor1sums <- djor1 %>% 
+  group_by(botn_id, aphia_id) %>% 
+  summarise(sum = sum(tal, na.rm = TRUE),
+            mean = mean(tal, na.rm = TRUE))
+
+djoryvirlit <- djor1 %>% 
+  pivot_wider(id_cols = c(botn_id, class, genus, scientific_name, rankname, aphia_id), names_from = grabba_nr, values_from = tal) %>% 
+  left_join(djor1sums) %>% 
+  arrange(botn_id, class, scientific_name)
+
+knitr::kable(djoryvirlit, caption = "Yvirlit", booktabs = T, align = c("l", "l", "l", "l", "l", "r", "r", "r", "r")) %>% 
+  kable_styling(bootstrap_options = c("condensed"), full_width = F) %>% 
+  collapse_rows(columns = 1:3, valign = "top") %>% 
+  kable_styling(latex_options = c("hold_position"))
+
+```
+
+
+```{r}
+djor1sumclass <- djor1 %>% 
+  group_by(botn_id, class) %>% 
+  summarise(sum = sum(tal, na.rm = TRUE),
+            mean = mean(sum, na.rm = TRUE))
+
+djorsam <- djor1 %>% 
+  group_by(botn_id, class, grabba_nr) %>% 
+  summarise(tal = sum(tal, na.rm = TRUE)) %>% 
+  pivot_wider(id_cols = c(botn_id, class), names_from = grabba_nr, values_from = tal) %>% 
+  left_join(djor1sumclass) %>% 
+  arrange(botn_id, class)
+
+knitr::kable(djorsam, caption = "Samanteljing", booktabs = T, align = c("l", "l", "r", "r", "r", "r")) %>% 
+  kable_styling(bootstrap_options = c("condensed"), full_width = F) %>% 
+  collapse_rows(columns = 1, valign = "top") %>% 
+  kable_styling(latex_options = c("hold_position"))
+
+```
+
+
+```{r}
+djoreinsum <- djor %>%
+  group_by(djorliv_id) %>% 
+  summarise(talavdjoraslogum = sum(tal, na.rm = TRUE),
+            talavdjorum = sum(tal, na.rm = TRUE))
+```
+
 
 ```{r message=FALSE, warning=FALSE, include=FALSE, results='hide'}
 #talvur sum skulu skrivast til excelfíl
+if(nrow(aliskipan) == 0) {
+  alara1 <- data.frame(aliskipan = "einki rakstrartøl tøk")
+  ali_lyklatol <- tol1
+}
 
 dfwrite <- list(alara1, ali_lyklatol, urslitbotnl, urslitkemi, urslitsens1, kemimean, sensmean, urslitdjoreinkul,
                 urslitdjoraliv)

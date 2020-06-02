@@ -1,0 +1,59 @@
+---
+title: "notes_djoralivmodul"
+author: "Birgitta"
+date: "19/05/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Github
+
+Arbeitt verður á nýggjari "menningar" branch á Github, tá arbeiði er góðkent av Umhvørvisstovuni verða nýggja og gamla branch'inar samantvunnar. Hetta merkir at øll arbeiðsmannagongdin verður dokumentera og goymd til evt. seinni nýtslu.
+
++ hevur Umhvørvisstovan tikið avgerð um open source?
+    - vátta at tað verður open source
+    
+
+## Spurningar (tað eru eisini nakrir í TODO listanum)
+
++ talvurnar
+  - hvussu nógvar kanningar skulu verða í listanum?
+  - skulu djór, sum eru á svartalistanum vísast?
+
+## TODO:
+
++ plotta positiónir
+  - bara fyri aliøki? ella fyri fjørðin?
+      + trupulleikar við gomlum aliøkum
+      + trupulleikar tá alifirðirnir eru defineraðir tvørtur um oyggjar
+      + sumi aliøka hava felags samanberingarstøð
+      
+      + alifjørðin fyrst
+      + so fokus á  aliøki
+      
+    
+  - interactivt?
+  
+  
++ inkorpurerað svartalistan
+    - norsk vegleiðing 2016
+    
++ norsku sensitivitets virðini -- leggjast inn sum csv ella út á databasan??
+
++ skriva funktiónir til index
+
++ rokna index virðir
+  - dupultkannað við python roknaði indeksir
+  - dupultkannað við benthos r pakka
+  
++ plotta index
+  - kort
+  - scatterplots
+  - distance til ringsýni ?
+
+
+## DONE:
++ rmd skal kunna koyra uttan rakstrartøl!

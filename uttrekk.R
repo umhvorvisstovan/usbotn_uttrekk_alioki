@@ -2,7 +2,7 @@
 
 
 #her skrivar tú hvat fyri aliøki tú skal hyggja at
-alioki <- "A21"
+alioki <- "A43"
 
 #her skrivar tú hvussu nógvar útsetur tú skal hyggja at
 utsetur <- 3
@@ -40,16 +40,18 @@ if(dir.exists("rapportir") == FALSE) {dir.create("rapportir")}
 if(dir.exists("data_output") == FALSE) {dir.create("data_output")}
 
 #packages required
-uttrekk_pack <- c("tidyverse", "lubridate", "shiny", "odbc", "knitr", "kableExtra", "ggforce")
+uttrekk_pack <- c("tidyverse", "lubridate", "shiny", "odbc", "knitr", "kableExtra", "ggforce", "ggpubr", "ggrepel")
 mangla <- uttrekk_pack[!uttrekk_pack %in% installed.packages()[,"Package"]]
 if(!is.null(nrow(mangla))) {stop(paste("\n \n Tú manglar at installera package/s:", mangla))}
 
+
+
 rmarkdown::render("RapportUppsamlingAlioki.Rmd", params = list(
   alioki = alioki,
-  server = rstudioapi::showPrompt(title = "Server", message = "Server navn:", default = ""),
-  database = rstudioapi::showPrompt(title = "Database", message = "Database navn:", default = ""),
-  user = rstudioapi::showPrompt("Database username", "username"),
-  loyniord = rstudioapi::askForPassword("Database password"),
+  server = Sys.getenv("SERVER"),
+  database = Sys.getenv("DATABASE"),
+  user = Sys.getenv("USER"),
+  loyniord = Sys.getenv("PASSWORD"),
   kemi = kemi,
   lev = utsetur
 ),
