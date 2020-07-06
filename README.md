@@ -9,6 +9,8 @@ Fyri at r pakkar og dátugrunn upplýsingar skulu innlesast, skal skriptið "scr
 ## Tín telda skal hava atgongd til dátugrunnin!
 1. ein odbc drivari skal verða installeraður á tínari teldu sum hóskar til dátugrunnin, ið verður nýttur!
 
+https://odbc.postgresql.org/
+
 ## Fyri at gera eina rapport skal tú:
 
 1. leggja úttrekk frá aliskipanini (.xlsx) í faldaran "data/UrAliskipan/", navni skal verða AXX.xlsx, har XX er nummari á aliøkinum.

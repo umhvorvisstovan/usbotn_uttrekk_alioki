@@ -97,7 +97,7 @@ if (is_html_output() == TRUE){
 ```{r constants, include=FALSE}
 # hetta er connection til usbotn dátugrunnin
 # hjálpari til skript menning, set developing til TRUE 
-developing <- FALSE
+developing <- TRUE
 
 if(developing == TRUE){
   con <- dbConnect(odbc::odbc(), Driver = "PostgreSQL Unicode(x64)", 
@@ -1754,7 +1754,7 @@ djoralivfjord <- bakgrundskort_simp +
   skrift + 
   bakgrundbla
 
-djoralivfjord
+#djoralivfjord
 ```
 
 ## Yvirlit yvir djóralívssýnini
@@ -1878,7 +1878,7 @@ djoryvirlit <- djor1 %>%
 
 djoryvirlit %>% 
   select(-svartalisti, -svartalistin) %>% 
-  knitr::kable(caption = "Úrslit rá seinastu djóralívskanning", booktabs = T,
+  knitr::kable(caption = "Úrslit frá seinastu djóralívskanning", booktabs = T,
                align = c("l", "l", "l", "l", "l", "r", "r", "r", "r")) %>% 
   kable_styling(bootstrap_options = c("condensed"), 
                 full_width = F, font_size = 12) %>% 
@@ -2143,9 +2143,9 @@ urslitindex <- urslitdjoraliv_sensi %>%
          NSI = map_dbl(data, taxa = aphia_id, index = ES100avg_2012, count = tal, NSI),
          taxa_mangla_ISI = S - map_dbl(data, index = ES100min5_2012, taxaIndex),
          ISI2012 = map_dbl(data, taxa = aphia_id, index = ES100min5_2012, ISI),
-         taxa_mangla_AMBI = S - map_dbl(data, index = azti_values, taxaIndex),
-         AMBI = map_dbl(data, taxa = aphia_id, index = azti_values, count = tal, AMBI),
-         NQI1 = map_dbl(data, taxa = aphia_id, index = azti_values, count = tal, NQI)
+         taxa_mangla_AMBI = S - map_dbl(data, index = ambi_values, taxaIndex),
+         AMBI = map_dbl(data, taxa = aphia_id, index = ambi_values, count = tal, AMBI),
+         NQI1 = map_dbl(data, taxa = aphia_id, index = ambi_values, count = tal, NQI)
   ) %>% 
   select(-data) %>% 
   # støðu klassificeringar av index virðum sambart norsku vegleiðingini
