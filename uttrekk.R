@@ -2,7 +2,7 @@
 
 
 #her skrivar tú hvat fyri aliøki tú skal hyggja at
-alioki <- "A43"
+alioki <- "A11"
 
 #her skrivar tú hvussu nógvar útsetur tú skal hyggja at
 utsetur <- 3
