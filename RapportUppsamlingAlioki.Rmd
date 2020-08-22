@@ -96,7 +96,9 @@ if (is_html_output() == TRUE){
 
 ```{r constants, include=FALSE}
 # hetta er connection til usbotn dátugrunnin
-# hjálpari til skript menning, set developing til TRUE 
+
+# hjálpari til skript menning, set developing til TRUE
+# OBS! minst til at seta hetta aftur til FALSE!!
 developing <- TRUE
 
 if(developing == TRUE){
@@ -107,7 +109,7 @@ if(developing == TRUE){
                    PWD = Sys.getenv("PASSWORD"),
                    Port = 5432,
                    encoding = "windows-1252")
-  alioki <- "A11"
+  alioki <- "A52"
   lev <- 3
   utsetur <- 3
   kemi <- 2014
@@ -126,15 +128,21 @@ s1 <- "#418CFC"
 s2 <- "#4F820D"
 s3 <- "#FFD308"
 s4 <- "#D63118"
+
+s35 <- "#FF9508" #djóralívskanningar hava fimm stig, hetta er fyri "vánalig" tann appilsinguli liturin
+
 #litur til NA, tvs. har ikki nokk av dátum eru til eina útrokning, ella einki data er registrera
 na_litur <- "grey"
+
 #navnið sum NA skal hava í plottum
 na_navn <- "vantandi dátur"
+
+# litir og nøvn til sensorisku kanningarnar
 StodaColourHex <- c(s1, s2, s3, s4, na_litur)
 stodafac <- c("1", "2", "3", "4")
 StodLabel <- c("1 - Ódálkað", "2 - Nakað dálkað", "3 - Dálkað", "4 - Illa dálkað", na_navn)
 
-#litir til kemi kanningarnar
+#litir til kemisku kanningarnar
 MarkColoursHex <- c(s1, s3, s4)
 #Cu and LOI limit values
 CuLOImarkv <- c(0, 170, 270, Inf)
@@ -163,12 +171,11 @@ synisslag <- c("SS", "FS", "OS", "BS", "MS", "RS", "OO")
 synisnavn <- c("Samanberingarsýni", "Fjarasýni", "Økissýni", "Blandsýni?", "Millumsýni", "Ringsýni", "Ókent")
 
 
-# litir og markvirðir 
-# markvirðið eru úr Norska standardinum (Vanntype G 1-3)
+# litir og markvirðir á djóralívskanningunum
 # dataframe við markvirðum pr index
-index_all <- c("NQI1", "H", "ES100",
-               "ISI2012", "NSI")
+index_all <- c("NQI1", "H", "ES100", "ISI2012", "NSI")
 indexlabels <- c("NQI1", "H'", "ES100", "ISI 2012", "NSI")
+# markvirðið eru úr Norska standardinum (Vanntype G 1-3)
 dfMark_index <- data.frame(index = index_all,
                            V = c(0.31, 0.9, 5, 4.7, 10),
                            IV = c(0.49, 1.8, 9, 6.4, 15),
@@ -197,16 +204,11 @@ ISI2012_mark <- extract_breaks(dfMark_index1, "ISI 2012")
 NSI_mark <- extract_breaks(dfMark_index1, "NSI")
 NQI1_mark <- extract_breaks(dfMark_index1, "NQI1")
 
+# nøvn á støðuni á djóralívskanningunum
 index_stoda <- c("Sera vánalig", "Vánalig", "Tolulig", "Góð", "Sera góð")
 
 #litir
-i1 <- "blue"
-i2 <- "green"
-i3 <- "yellow"
-i4 <- "orange"
-i5 <- "red"
-
-indexColourHex <- c(i5, i4, i3, i2, i1)
+indexColourHex <- c(s4, s35, s3, s2, s1)
 
 ```
 
@@ -387,7 +389,6 @@ djorslag <- tbl(con, "djorslag") %>% collect()
 rank <- tbl(con, "taxonrank") %>% collect()
 
 #genererað svartalistan
-#source("scripts/svartalisti.R")
 black_df <- taxontree %>% filter(str_detect(ancestors, "Foraminifera")) %>% 
   bind_rows(
     taxontree %>% filter(str_detect(ancestors, "Nematoda"))) %>% 
@@ -1697,14 +1698,15 @@ dfkort <- djoralivsynifjord %>%
 dfk <- dfkort 
 
 talrap <- length(unique(dfkort$rap_id))
-stodd <- ifelse(talrap > 5, 0.6, 1)
+stodd <- ifelse(talrap > 5, 1, 1.5)
 
 djoralivfjord <- bakgrundskort_simp +
   geom_sf(data = dyb, colour = dybcolour) +
   geom_sf(data = alipoly, fill = NA, colour = "black", inherit.aes = FALSE) +
   geom_point(data = dfk,
              aes(y = lat, x = lng, 
-                 colour = factor(year)),
+                 colour = factor(year),
+                 shape = stodslag_id),
              show.legend = TRUE,
              alpha = 0.8,
              size = stodd) +
@@ -1712,57 +1714,33 @@ djoralivfjord <- bakgrundskort_simp +
            ylim = c(min(dfk$lat, na.rm = TRUE), max(dfk$lat, na.rm = TRUE))+c(-0.001,0.001),
            expand = TRUE)+
   scale_color_discrete(name = "Sýnistøku ár") +
-  ggtitle(paste0("Djóralívssýnini á alifjørði ", alifjord_nrr)) +
+  scale_shape_discrete(name = "Støðslag") +
   guides(col = guide_legend(override.aes = list(shape = 15, size = 3)))+
   theme_void() +
   skrift + 
   bakgrundbla
 
-djoralivfjord
+djoralivfacetfjord <- djoralivfjord +
+  facet_wrap(~year) +
+  ggtitle(paste0("Djóralívssýnini á alifjørði ", alifjord_nrr, " - Sýnini tey seinastu árini")) +
+  theme(legend.position = "right") +
+  bakgrundbla
+
+djoralivfacetfjord
 
 ```
 
-
-```{r kortdjorfjord, out.width='100%', fig.cap="Positiónirnar á djóralívssýnunum á alifjørðinum, fyri hvørt ár"}
-dfkort <- djoralivsyni %>% 
-  filter(!is.na(year)) 
-
-dfk <- dfkort 
-
-talrap <- length(unique(dfkort$rap_id))
-stodd <- ifelse(talrap > 5, 0.6, 1)
-
-djoralivfjord <- bakgrundskort_simp +
-  geom_sf(data = dyb, colour = dybcolour) +
-  geom_sf(data = alipoly, fill = NA, colour = "black", inherit.aes = FALSE) +
-  geom_point(data = dfk,
-             aes(y = lat, x = lng, 
-                 colour = stodslag_id),
-             position=position_jitter(width=0.0008, height=0.0006),
-             show.legend = TRUE,
-             alpha = 0.8,
-             size = stodd) +
-  coord_sf(xlim = c(min(dfk$lng, na.rm = TRUE), max(dfk$lng, na.rm = TRUE))+c(-0.005,0.005),
-           ylim = c(min(dfk$lat, na.rm = TRUE), max(dfk$lat, na.rm = TRUE))+c(-0.001,0.001),
-           expand = TRUE) +
-  ggtitle(paste0("Djóralívssýnini á aliøki ", alioki)) +
-  scale_color_discrete(name = "Støðslag") +
-  guides(col = guide_legend(override.aes = list(shape = 15, size = 3)))+
-  facet_wrap(~factor(year)) +
-  theme_void() +
-  theme(legend.position = "bottom") +
-  skrift + 
-  bakgrundbla
-
-#djoralivfjord
+```{r djorfjordtogether, out.width='100%', fig.cap="Positiónirnar á djóralívssýnunum á alifjørðinum, øll árini"}
+djoralivfjord
 ```
 
 ## Yvirlit yvir djóralívssýnini
 
 Góðskukrøv:
-- 80 % av taldu sløgunum skulu verða á species niveau
-- grabbin skal verða fult upptaldur
-- ein grabbi á 0.100 m2 skal verða nýttur
+
+* 80 % av taldu sløgunum skulu verða á species niveau
+* grabbin skal verða fult upptaldur
+* ein grabbi á 0.100 m^2^ skal verða nýttur
 
 ```{r talvadjorlivyvirlit}
 
@@ -1770,6 +1748,7 @@ letterfunc <- function(to){
   LETTERS[seq(1, to)]
 }
 
+# grabbar skulu hava nýtt navn, A, B, ... fyri at betri kunna databehandla og hava eina snøggari talvu!
 
 yvirlit <- djoralivsyni %>% 
   left_join(filtrerad_djortalva, by = "djorliv_id") %>% 
@@ -1781,10 +1760,14 @@ yvirlit <- djoralivsyni %>%
   ungroup() %>% 
   select(djorliv_id, botn_id, stodslag_id, grabba_nr, grabba_nr_nytt, grabbavidd_m2.x, upptalt,
          total_taxon_species, total_individuals_species, perc_individual_species) %>% 
-  mutate(godska = if_else(upptalt == "FULT" & grabbavidd_m2.x == 0.100 & perc_individual_species >= percentage_species, TRUE, FALSE))
+  mutate(godska = if_else(upptalt == "FULT" & grabbavidd_m2.x == 0.100 & perc_individual_species >= percentage_species, TRUE, FALSE)) %>% 
+  group_by(botn_id) %>% 
+  mutate(grabbavidd_mean = mean(grabbavidd_m2.x[upptalt!="EINKI"], na.rm = TRUE),
+         grabbavidd_sum = sum(grabbavidd_m2.x[upptalt!="EINKI"], na.rm = TRUE)) %>% 
+  ungroup()
 
 yvirlit %>% 
-  select(-grabba_nr, -botn_id) %>% 
+  select(-grabba_nr, -botn_id, -grabbavidd_mean, -grabbavidd_sum) %>% 
   rename("grabbavídd (m2)" = grabbavidd_m2.x,
          "grabbi (broytt)" = grabba_nr_nytt,
          "støðslag" = stodslag_id,
@@ -1812,10 +1795,7 @@ yvirlit %>%
 
 
 ```{r taxontree}
-#um man ynskir at lættari brúka taxon data í excel ella øðrum, ber til at nýta taxontree1 talvuna
-#hendan talvan verður gjørd í R
-
-# hetta tekur lana tíð!! skal møuliga filtrerast via urslitdjoraliv áðrenn...
+# taxontree fyllir nógv!! skal møuliga filtrerast via urslitdjoraliv áðrenn tað verður tikið niður av dátugrunni...
 
 taxonfilter <- function(df){ 
   df %>% 
@@ -1831,6 +1811,7 @@ test <- taxontree %>%
   ungroup()
 
 taxontree1 <- taxontree %>% 
+  # filtur er sett á her fyri skjótari dátuviðgerð
   filter(aphia_id %in% !! urslitdjoraliv$aphia_id) %>% 
   mutate(ancestors1 = str_replace_all(ancestors, " ", "_"),
          ancestors1 = str_replace_all(ancestors1, ",", " "),
@@ -1855,50 +1836,69 @@ djor <- yvirlit %>%
   left_join(urslitdjoraliv_altered, by = "djorliv_id") %>% 
   left_join(djoralivsyni) %>% 
   left_join(taxontree1) %>% 
-  select(djorliv_id, botn_id, grabba_nr_nytt, grabbavidd_m2.x, class, genus, scientific_name, 
-         rankname, aphia_id, tal, kanningy, svartalisti)
+  select(djorliv_id, botn_id, grabba_nr_nytt, grabbavidd_m2.x, grabbavidd_mean, grabbavidd_sum,
+         class, genus, scientific_name, rankname, aphia_id, tal, 
+         year, svartalisti)
 
-djor1 <- djor %>% 
-  filter(kanningy == max(kanningy))
+djorsums <- djor %>%
+  select(-djorliv_id, -grabba_nr_nytt) %>% 
+  group_by(botn_id, aphia_id, grabbavidd_sum, grabbavidd_mean) %>% 
+  mutate(sum = sum(tal, na.rm = TRUE),
+         sum = if_else(sum == 0, NA_real_, sum),
+         mean = mean(tal, na.rm = TRUE),
+         mean = if_else(is.na(mean), NA_real_, mean))
 
-djor1sums <- djor1 %>% 
-  group_by(botn_id, aphia_id) %>% 
-  summarise(sum = sum(tal, na.rm = TRUE),
-            mean = mean(tal, na.rm = TRUE))
 
-djoryvirlit <- djor1 %>% 
-  pivot_wider(id_cols = c(botn_id, class, genus, scientific_name, rankname, aphia_id, svartalisti),
+# legg sum og mean sum nýggir grabbar aftuart teimum sum longu eru, so at teir verða viðgjørdir sum nýggj sýni
+
+djor <- djor %>% 
+  bind_rows(djorsums %>% 
+              select(-tal, -grabbavidd_m2.x) %>% 
+              pivot_longer(cols = c(mean, sum), names_to = "grabba_nr_nytt", values_to = "tal") %>% 
+              pivot_longer(cols = c(grabbavidd_mean, grabbavidd_sum), names_to = "test", values_to = "grabbavidd_m2.x") %>% 
+              group_by(botn_id, aphia_id, grabba_nr_nytt) %>% 
+              mutate(grabbavidd_m2.x = if_else(grabba_nr_nytt == "mean", min(grabbavidd_m2.x), max(grabbavidd_m2.x))) %>% 
+              select(-test) %>% 
+              ungroup() %>% 
+              distinct_all
+            )
+
+djoryvirlit <- djor %>% 
+  pivot_wider(id_cols = c(botn_id, class, genus, scientific_name, rankname, aphia_id, svartalisti, year),
               names_from = grabba_nr_nytt, values_from = tal) %>% 
-  left_join(djor1sums) %>% 
+  #left_join(djorsums) %>% 
   select(-aphia_id) %>% 
   filter(!is.na(scientific_name)) %>% 
   mutate(svartalistin = if_else(svartalisti == FALSE, "sløg nýtt til index útrokningar",
                                 "sløg á svartalista")) %>% 
-  arrange(botn_id, class, scientific_name, svartalisti)
+  arrange(botn_id, svartalisti, class, scientific_name)
 
-djoryvirlit %>% 
+djoryvirlit_seinastakanning <- djoryvirlit %>% 
+  filter(year == max(year))
+
+djoryvirlit_seinastakanning %>%
   select(-svartalisti, -svartalistin) %>% 
   knitr::kable(caption = "Úrslit frá seinastu djóralívskanning", booktabs = T,
                align = c("l", "l", "l", "l", "l", "r", "r", "r", "r")) %>% 
   kable_styling(bootstrap_options = c("condensed"), 
                 full_width = F, font_size = 12) %>% 
-  pack_rows(index = table(djoryvirlit$svartalistin)) %>% 
+  pack_rows(index = table(djoryvirlit_seinastakanning$svartalistin)) %>% 
   kable_styling(latex_options = c("hold_position"))
 
 ```
 
 
 ```{r talvaclasssum}
-djor1sumclass <- djor1 %>%
-  group_by(botn_id, class) %>%
+djorsumclass <- djor %>%
+  group_by(botn_id, class, grabba_nr_nytt) %>%
   summarise(sum = sum(tal, na.rm = TRUE),
             mean = mean(sum, na.rm = TRUE))
 
-djorsam <- djor1 %>%
+djorsam <- djor %>%
   group_by(botn_id, class, grabba_nr_nytt) %>%
   summarise(tal = sum(tal, na.rm = TRUE)) %>%
   pivot_wider(id_cols = c(botn_id, class), names_from = grabba_nr_nytt, values_from = tal) %>%
-  left_join(djor1sumclass) %>%
+  #left_join(djor1sumclass) %>%
   arrange(botn_id, class)
 
 knitr::kable(djorsam, caption = "Samanteljing", booktabs = T, align = c("l", "l", "r", "r", "r", "r")) %>%
@@ -1990,10 +1990,10 @@ urslitdjoraliv_sensi <- urslitdjoraliv_altered %>%
                                          "0" = NA_character_, "1" = "0", "2" = "1.5", "4" = "4.5", "5" = "6"))) %>% 
   ungroup()
 
-#sletta óneyðugar variablar
+# sletta óneyðugar variablar
 rm(NSIlist, ISIlist, AMBIlist, AZTIlist, sensitivity)
 
-#funktiónir til at rokna index
+# funktiónir til at rokna index
 
 # Species Richness (S)
 # tal av taxa/djórasløgum

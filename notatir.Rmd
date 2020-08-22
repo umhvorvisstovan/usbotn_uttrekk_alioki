@@ -38,9 +38,6 @@ Arbeitt verður á nýggjari "menningar" branch á Github, tá arbeiði er góð
       + so fokus á  aliøki
     
   - interactivt?
-
-+ rokna index virðir
-  - dupultkannað við benthos r pakka
   
 + plotta index
   - scatterplots

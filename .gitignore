@@ -31,6 +31,7 @@ data_output
 # ignore all xls and xlsx files uttan mastersheet aliskipan
 *.xls
 *.xlsx
-\!mastersheetAliskipan!.xlsx
+data/UrAliskipan/*
+!*/mastersheetAliskipan!.xlsx
 # ignore all html files
 *.html
