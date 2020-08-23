@@ -99,7 +99,7 @@ if (is_html_output() == TRUE){
 
 # hjálpari til skript menning, set developing til TRUE
 # OBS! minst til at seta hetta aftur til FALSE!!
-developing <- TRUE
+developing <- FALSE
 
 if(developing == TRUE){
   con <- dbConnect(odbc::odbc(), Driver = "PostgreSQL Unicode(x64)", 
@@ -109,7 +109,7 @@ if(developing == TRUE){
                    PWD = Sys.getenv("PASSWORD"),
                    Port = 5432,
                    encoding = "windows-1252")
-  alioki <- "A52"
+  alioki <- "A89"
   lev <- 3
   utsetur <- 3
   kemi <- 2014
@@ -204,11 +204,14 @@ ISI2012_mark <- extract_breaks(dfMark_index1, "ISI 2012")
 NSI_mark <- extract_breaks(dfMark_index1, "NSI")
 NQI1_mark <- extract_breaks(dfMark_index1, "NQI1")
 
+index_godska_fail <- "Líkur ikki góðskukrøv"
+
 # nøvn á støðuni á djóralívskanningunum
 index_stoda <- c("Sera vánalig", "Vánalig", "Tolulig", "Góð", "Sera góð")
+index_stoda_na <- c("Sera vánalig", "Vánalig", "Tolulig", "Góð", "Sera góð", index_godska_fail)
 
 #litir
-indexColourHex <- c(s4, s35, s3, s2, s1)
+indexColourHex <- c(s4, s35, s3, s2, s1, "grey20")
 
 ```
 
@@ -1691,7 +1694,9 @@ filtrerad_djortalva <- djortalva %>%
 
 ## Positiónir á djóralívssýnunum
 
-```{r kortdjorfjordtogether, out.width='100%', fig.cap="Positiónirnar á djóralívssýnunum á alifjørðinum"}
+### Á alifjørði `r alifjord_nrr`
+
+```{r kortdjorfjordtogether, out.width='100%', fig.cap="Positiónirnar á djóralívssýnunum á alifjørðinum, øll árini"}
 dfkort <- djoralivsynifjord %>% 
   filter(!is.na(year)) 
 
@@ -1716,22 +1721,58 @@ djoralivfjord <- bakgrundskort_simp +
   scale_color_discrete(name = "Sýnistøku ár") +
   scale_shape_discrete(name = "Støðslag") +
   guides(col = guide_legend(override.aes = list(shape = 15, size = 3)))+
+  ggtitle(paste0("Djóralívssýnini á alifjørði ", alifjord_nrr, "øll árini")) +
   theme_void() +
   skrift + 
   bakgrundbla
 
-djoralivfacetfjord <- djoralivfjord +
-  facet_wrap(~year) +
-  ggtitle(paste0("Djóralívssýnini á alifjørði ", alifjord_nrr, " - Sýnini tey seinastu árini")) +
-  theme(legend.position = "right") +
-  bakgrundbla
-
-djoralivfacetfjord
+djoralivfjord
 
 ```
 
-```{r djorfjordtogether, out.width='100%', fig.cap="Positiónirnar á djóralívssýnunum á alifjørðinum, øll árini"}
-djoralivfjord
+### Á aliøki `r alioki`
+
+```{r kortdjortfacet, out.width='100%', fig.cap="Positiónirnar á djóralívssýnunum á aliøkinum fyri hvørt ár"}
+dfkort <- djoralivsyni %>% 
+  filter(!is.na(year)) 
+
+dfk <- dfkort 
+
+talrap <- length(unique(dfkort$rap_id))
+stodd <- ifelse(talrap > 5, 1, 1.5)
+
+djoralivalioki <- bakgrundskort_simp +
+  geom_sf(data = dyb, colour = dybcolour) +
+  geom_sf(data = alipoly, fill = NA, colour = "black", inherit.aes = FALSE) +
+  geom_point(data = dfk,
+             aes(y = lat, x = lng, 
+                 colour = factor(year),
+                 shape = stodslag_id),
+             show.legend = TRUE,
+             alpha = 0.8,
+             size = stodd) +
+  coord_sf(xlim = c(min(dfk$lng, na.rm = TRUE), max(dfk$lng, na.rm = TRUE))+c(-0.005,0.005),
+           ylim = c(min(dfk$lat, na.rm = TRUE), max(dfk$lat, na.rm = TRUE))+c(-0.001,0.001),
+           expand = TRUE)+
+  scale_color_discrete(name = "Sýnistøku ár") +
+  scale_shape_discrete(name = "Støðslag") +
+  guides(col = guide_legend(override.aes = list(shape = 15, size = 3)))+
+  theme_void() +
+  skrift + 
+  bakgrundbla
+
+djoralivfacetalioki <- djoralivalioki +
+  facet_wrap(~year) +
+  ggtitle(paste0("Djóralívssýnini á aliøki ", alioki, " - Sýnini tey seinastu árini")) +
+  theme(legend.position = "right") +
+  bakgrundbla
+
+djoralivfacetalioki
+
+```
+
+```{r kortdjortogether, out.width='100%', fig.cap="Positiónirnar á djóralívskanningunum á aliøkinum, øll árini"}
+djoralivalioki
 ```
 
 ## Yvirlit yvir djóralívssýnini
@@ -1765,6 +1806,11 @@ yvirlit <- djoralivsyni %>%
   mutate(grabbavidd_mean = mean(grabbavidd_m2.x[upptalt!="EINKI"], na.rm = TRUE),
          grabbavidd_sum = sum(grabbavidd_m2.x[upptalt!="EINKI"], na.rm = TRUE)) %>% 
   ungroup()
+
+# grabbar ið ikki lúka góðskukrøvini
+godska_false <- yvirlit %>% 
+  filter(godska == FALSE) %>% 
+  select(djorliv_id)
 
 yvirlit %>% 
   select(-grabba_nr, -botn_id, -grabbavidd_mean, -grabbavidd_sum) %>% 
@@ -1861,7 +1907,8 @@ djor <- djor %>%
               select(-test) %>% 
               ungroup() %>% 
               distinct_all
-            )
+  ) %>% 
+  mutate(djorliv_id = if_else(is.na(djorliv_id), paste0(botn_id, "-", grabba_nr_nytt), djorliv_id))
 
 djoryvirlit <- djor %>% 
   pivot_wider(id_cols = c(botn_id, class, genus, scientific_name, rankname, aphia_id, svartalisti, year),
@@ -1874,15 +1921,16 @@ djoryvirlit <- djor %>%
   arrange(botn_id, svartalisti, class, scientific_name)
 
 djoryvirlit_seinastakanning <- djoryvirlit %>% 
-  filter(year == max(year))
+  filter(year == max(year)) %>% 
+  mutate(botn_id_svartalisti = paste(botn_id, "-", svartalistin))
 
 djoryvirlit_seinastakanning %>%
-  select(-svartalisti, -svartalistin) %>% 
+  select(-botn_id_svartalisti, -botn_id, -svartalisti, -svartalistin, -year) %>% 
   knitr::kable(caption = "Úrslit frá seinastu djóralívskanning", booktabs = T,
-               align = c("l", "l", "l", "l", "l", "r", "r", "r", "r")) %>% 
+               align = c("l", "l", "l", "l", "r", "r", "r", "r", "r")) %>% 
   kable_styling(bootstrap_options = c("condensed"), 
                 full_width = F, font_size = 12) %>% 
-  pack_rows(index = table(djoryvirlit_seinastakanning$svartalistin)) %>% 
+  pack_rows(index = table(fct_inorder(djoryvirlit_seinastakanning$botn_id_svartalisti))) %>% 
   kable_styling(latex_options = c("hold_position"))
 
 ```
@@ -1890,24 +1938,39 @@ djoryvirlit_seinastakanning %>%
 
 ```{r talvaclasssum}
 djorsumclass <- djor %>%
-  group_by(botn_id, class, grabba_nr_nytt) %>%
-  summarise(sum = sum(tal, na.rm = TRUE),
-            mean = mean(sum, na.rm = TRUE))
-
-djorsam <- djor %>%
+  filter(!grabba_nr_nytt %in% c("sum", "mean")) %>% 
   group_by(botn_id, class, grabba_nr_nytt) %>%
   summarise(tal = sum(tal, na.rm = TRUE)) %>%
+  ungroup() %>% 
+  group_by(botn_id, class) %>% 
+  summarise(mean = mean(tal, na.rm = TRUE),
+            sum = sum(tal, na.rm = TRUE))
+
+djorsam <- djor %>%
+  filter(!grabba_nr_nytt %in% c("sum", "mean")) %>%  
+  group_by(botn_id, class, grabba_nr_nytt) %>%
+  summarise(tal = sum(tal, na.rm = TRUE)) %>%
+  ungroup() %>% 
+  mutate(grabba_nr_nytt = factor(grabba_nr_nytt, ordered = TRUE)) %>% 
   pivot_wider(id_cols = c(botn_id, class), names_from = grabba_nr_nytt, values_from = tal) %>%
-  #left_join(djor1sumclass) %>%
+  left_join(djorsumclass) %>%
   arrange(botn_id, class)
 
-knitr::kable(djorsam, caption = "Samanteljing", booktabs = T, align = c("l", "l", "r", "r", "r", "r")) %>%
+djorsam_seinastakanning <- djorsam %>% 
+  filter(botn_id %in% djoryvirlit_seinastakanning$botn_id) %>% 
+  arrange(botn_id, class)
+
+djorsam_seinastakanning %>% 
+  select(-botn_id) %>% 
+  knitr::kable(caption = "Samanteljing", booktabs = T, align = c("l", "r", "r", "r", "r")) %>%
   kable_styling(bootstrap_options = c("condensed"), 
                 full_width = F, font_size = 12) %>%
-  collapse_rows(columns = 1, valign = "top") %>%
+  pack_rows(index = table(fct_inorder(djorsam_seinastakanning$botn_id))) %>%
   kable_styling(latex_options = c("hold_position"))
 
 ```
+
+
 
 ```{r idexfunctions}
 # Sensitivitetsvirðir, norsku og frá azti heimasíðuni
@@ -1973,13 +2036,13 @@ sensmatch <- function(data, sensitivity, djorslag, index){
 }
 
 #nýggir listar
-NSIlist <- sensmatch(urslitdjoraliv_altered, sensitivity, djorslag, ES100avg_2012)
-ISIlist <- sensmatch(urslitdjoraliv_altered, sensitivity, djorslag, ES100min5_2012)
-AMBIlist <- sensmatch(urslitdjoraliv_altered, sensitivity, djorslag, AMBI_EG)
-AZTIlist <- sensmatch(urslitdjoraliv_altered, sensitivity, djorslag, AZTI)
+NSIlist <- sensmatch(djor, sensitivity, djorslag, ES100avg_2012)
+ISIlist <- sensmatch(djor, sensitivity, djorslag, ES100min5_2012)
+AMBIlist <- sensmatch(djor, sensitivity, djorslag, AMBI_EG)
+AZTIlist <- sensmatch(djor, sensitivity, djorslag, AZTI)
 
 # úrslit frá djóralívskanningunum matcha til nýggju listarnar
-urslitdjoraliv_sensi <- urslitdjoraliv_altered %>%  
+urslitdjoraliv_sensi <- djor %>%  
   left_join(NSIlist, by = "aphia_id") %>% 
   left_join(ISIlist, by = "aphia_id") %>% 
   left_join(AMBIlist, by = "aphia_id") %>% 
@@ -2131,7 +2194,7 @@ NQI <- function(data, taxa, index, count){
 
 urslitindex <- urslitdjoraliv_sensi %>% 
   filter(svartalisti == FALSE) %>% 
-  group_by(djorliv_id) %>% 
+  group_by(djorliv_id, botn_id, grabba_nr_nytt) %>% 
   nest() %>% 
   mutate(S = map_dbl(data, taxa = aphia_id, sumTaxa),
          N = map_dbl(data, count = tal, totalAbundance),
@@ -2171,7 +2234,7 @@ index_keep_navn <- c("\\bS\\b" = "Tal av djórasløgum",
 
 
 urslitindex_long <- urslitindex %>% 
-  select(djorliv_id, index_keep) %>% 
+  select(djorliv_id, botn_id, grabba_nr_nytt, index_keep) %>% 
   pivot_longer(cols = index_keep,
                names_to = "index",
                values_to = "index_value") %>% 
@@ -2183,6 +2246,8 @@ urslitindex_long <- urslitindex %>%
               mutate(index = str_remove_all(index, "_stoda"))) %>% 
   mutate(index = factor(index, levels = index_keep, labels = index_keep_labels)) %>% 
   mutate(navn = str_replace_all(index, index_keep_navn)) %>% 
+  mutate(stoda_godska = if_else(djorliv_id %in% godska_false$djorliv_id & !is.na(stoda), index_godska_fail, as.character(stoda)),
+         stoda_godska = factor(stoda_godska, levels = index_stoda_na)) %>% 
   ungroup()
 
 
@@ -2195,45 +2260,66 @@ urslitindex_long <- urslitindex %>%
 ```{r talvaindex}
 index_einfold <- c("SN", "H'", "J'", "ES100", "ISI 2012", "NSI", "NQI1")
 
-einfoldsums <- urslitindex_long %>%
-  left_join(yvirlit, by = "djorliv_id") %>% 
-  filter(index %in% index_einfold) %>% 
-  group_by(botn_id, index) %>% 
-  summarise(sum = sum(index_value, na.rm = TRUE),
-            mean = mean(index_value, na.rm = TRUE))
-
-einfold <- urslitindex_long %>%
-  left_join(yvirlit, by = "djorliv_id") %>% 
+index_talva <- urslitindex_long %>%
   filter(index %in% index_einfold) %>% 
   pivot_wider(id_cols = c(botn_id, index, navn),
               names_from = grabba_nr_nytt, values_from = index_value) %>% 
-  left_join(einfoldsums) %>% 
-  mutate_if(is.numeric, round, digits = 3) 
+  mutate_if(is.numeric, round, digits = 3) %>% 
+  arrange(botn_id)
 
+index_seinastakanning <- index_talva %>%
+  filter(botn_id %in% djoryvirlit_seinastakanning$botn_id)
 
-einfold %>% 
+index_seinastakanning %>% 
   select(-botn_id) %>% 
   knitr::kable(caption = "Indexir - Vísitøl", booktabs = T,
-               align = c("l", "l", "l", "r", "r", "r", "r")) %>% 
+               align = c("l", "l", "r", "r", "r", "r")) %>% 
   kable_styling(bootstrap_options = c("condensed"),
                 full_width = F, font_size = 12) %>% 
-  pack_rows(index = table(einfold$botn_id)) %>% 
+  pack_rows(index = table(fct_inorder(index_seinastakanning$botn_id))) %>% 
   kable_styling(latex_options = c("hold_position"))
 ```
 
 
 ### Tíðarseria av útroknaðu indexunum frá djóralívskanningunum
 
+```{r indextimeseries, out.width="100%", fig.cap="Tíðarseria av indexvirðunum á djóralívskanningunum"}
+indextime <- urslitindex_long %>%
+  filter(!grabba_nr_nytt %in% c("sum", "mean")) %>% 
+  left_join(yvirlit %>% select(djorliv_id, godska), by = "djorliv_id") %>% 
+  left_join(djoralivsyni) %>%  
+  mutate(stoda_godska = fct_explicit_na(stoda_godska, na_level = na_navn)) %>% 
+  ggplot() +
+  geom_point(alpha = 0.8, aes(x = synistoku_dato, y = index_value, colour = stoda_godska, shape = stodslag_id))+
+  theme_minimal() +
+  geom_hline(yintercept = 0, show.legend = FALSE) +
+  scale_shape_discrete(name = "Støðslag") +
+  scale_colour_manual(values = c(indexColourHex, "grey50"), drop = FALSE, name = "Støða",
+                      labels = c(index_stoda_na, "eingi markvirði ásett"))+
+  guides(col = guide_legend(override.aes = list(shape = 15, size = 3)))+
+  guides(shape = guide_legend(override.aes = list(size = 2))) +
+  ggtitle(paste(alioki, "- Tíðarseria av indexvirðunum á djóralívskanningunum")) +
+  theme(axis.title = element_blank(),
+        axis.text.x = element_text(angle = 35, hjust = 1),
+        legend.position = "right")+
+  facet_wrap(index~., scales = "free_y")
+indextime
+```
+
 ### Kort av útroknaðu indexunum frá djóralívskanningunum
 
 ```{r indexmapfunc}
 
+# ggplot til eitt index, facet_wrap()
+
 indexkort <- function(dfkort, index){
   
-  dfkort <- dfkort %>% 
+  dfkort <- dfkort %>%
+    filter(!grabba_nr_nytt %in% c("sum", "mean")) %>% 
     left_join(yvirlit %>% select(djorliv_id, godska), by = "djorliv_id") %>% 
     left_join(djoralivsyni) %>% 
-    filter(index == !! index)
+    filter(index == !! index) %>% 
+    mutate(stoda_godska = fct_explicit_na(stoda_godska, na_level = na_navn))
   
   indexnavn <- dfkort %>% 
     distinct(navn) %>% 
@@ -2241,7 +2327,7 @@ indexkort <- function(dfkort, index){
   indexnavn <- paste0(indexnavn, " (", index, ")")
   
   talrap <- length(unique(dfkort$rap_id))
-  stodd <- ifelse(talrap > 5, 0.8, 1)
+  stodd <- ifelse(talrap > 5, 0.8, 1.2)
   
   #map boundaries
   xlim <- c(min(dfkort$lng, na.rm = TRUE), max(dfkort$lng, na.rm = TRUE))
@@ -2262,11 +2348,12 @@ indexkort <- function(dfkort, index){
     geom_sf(data = alipoly, fill = NA, colour = "black", inherit.aes = FALSE) +
     geom_point(data = dfkort,
                aes(y = lat, x = lng, 
-                   colour = stoda,
+                   colour = stoda_godska,
                    shape = stodslag_id),
                position=position_jitter(width=0.0008, height=0.0006),
                alpha = 0.8, size = stodd) +
-    scale_colour_manual(values = indexColourHex, drop = FALSE, name = "Støða", labels = index_stoda) +
+    scale_colour_manual(values = c(indexColourHex, na_litur), drop = FALSE, name = "Støða",
+                        labels = c(index_stoda_na, na_navn)) +
     scale_shape(name =  "Støðslag") +
     guides(col = guide_legend(override.aes = list(shape = 15, size = 3)))+
     guides(shape = guide_legend(override.aes = list(size = 2))) +
@@ -2291,57 +2378,103 @@ indexkort <- function(dfkort, index){
 
 ```
 
-#### Shannon-Wiener (H')
+```{r indexmapfuncmulti}
 
-```{r shannonkort, out.width='100%', fig.cap="Sannon-Wiener (H')"}
+# ggplot til eitt index, facet_wrap()
 
-indexkort(urslitindex_long, "H'")
+indexkortmulti <- function(dfkort, index, t = NULL){
+  
+  dfkort <- dfkort %>% 
+    filter(!grabba_nr_nytt %in% c("sum", "mean")) %>% 
+    left_join(yvirlit %>% select(djorliv_id, godska), by = "djorliv_id") %>% 
+    left_join(djoralivsyni) %>% 
+    filter(index %in% !! index) %>% 
+    mutate(stoda_godska = fct_explicit_na(stoda_godska, na_level = na_navn))
+  
+  #indexnavn <- paste0(t, " (", paste(index, collapse = ", "), ")")
+  indexnavn <- t
+  
+  talrap <- length(unique(dfkort$rap_id))
+  stodd <- ifelse(talrap > 5, 0.8, 1.2)
+  
+  #map boundaries
+  xlim <- c(min(dfkort$lng, na.rm = TRUE), max(dfkort$lng, na.rm = TRUE))
+  ylim <- c(min(dfkort$lat, na.rm = TRUE), max(dfkort$lat, na.rm = TRUE))
+  if(xlim[2] - xlim[1] < lngmin) {xlim <- mean(xlim) + c(-lngmin/2, lngmin/2)}
+  if(ylim[2] - ylim[1] < latmin) {ylim <- mean(ylim) + c(-latmin/2, latmin/2)}
+  
+  #no of columns and rows to be facetted
+  if(round(ylim[2] - ylim[1],3) >= latmin & round(ylim[2] - ylim[1],3) <= latmax) {rowfacet <- 3} else {rowfacet <- 2}
+  colfacet <- length(index)
+  
+  #kanna hvussu nógvar rows eru neyðugar
+  if(talrap < rowfacet) {rowfacet = talrap}
+  
+  
+  indexkortfacet <- bakgrundskort_simp +
+    geom_sf(data = dyb, colour = dybcolour, size = 0.3) +
+    geom_sf(data = alipoly, fill = NA, colour = "black", inherit.aes = FALSE) +
+    geom_point(data = dfkort,
+               aes(y = lat, x = lng, 
+                   colour = stoda_godska,
+                   shape = stodslag_id),
+               position=position_jitter(width=0.0008, height=0.0006),
+               alpha = 0.8, size = stodd) +
+    scale_colour_manual(values = c(indexColourHex, na_litur), drop = FALSE, name = "Støða",
+                        labels = c(index_stoda_na, na_navn)) +
+    scale_shape(name =  "Støðslag") +
+    guides(col = guide_legend(override.aes = list(shape = 15, size = 3)))+
+    guides(shape = guide_legend(override.aes = list(size = 2))) +
+    #facet_grid(~kanning, ncol = colfacet, nrow = rowfacet) +
+    facet_grid_paginate(kanning~index, ncol = colfacet, nrow = rowfacet, page = 1) +
+    coord_sf(xlim = xlim, ylim = ylim)+
+    theme_minimal() +
+    bakgrundbla +
+    skrift +
+    ggtitle(paste(alioki, indexnavn))
+  
+  n <- ceiling(talrap/rowfacet)
+  if(n > 1) {
+    for(i in 1:n){
+      print(indexkortfacet + 
+              facet_grid_paginate(kanning~index, ncol = colfacet, nrow = rowfacet, page = i) +
+              ggtitle(paste0(alioki, " - ", indexnavn, " (", i, "/", n, ")")))
+    }
+  } else {
+    indexkortfacet
+  }
+}
 
 ```
 
-#### Hurlberts diversitetsindex (ES100)
 
-```{r hurlbertkort, out.width='100%', fig.cap="Hurlberts diversitetsindex (ES100)"}
+#### Diversitetsindex, Shannon-Wiener (H') og Hurlberts diversitetsindex (ES100)
 
-indexkort(urslitindex_long, "ES100")
+```{r diversitetskort, out.width='100%', fig.cap="Sannon-Wiener (H') og Hurlberts diversitetsindex (ES100)"}
 
-```
-
-#### Indicator Species Index (ISI 2012)
-
-```{r isikort, out.width='100%', fig.cap="Indicator Species Index (ISI 2012)"}
-
-indexkort(urslitindex_long, "ISI 2012")
+indexkortmulti(urslitindex_long, c("H'", "ES100"), t = "Diversitetsindex")
 
 ```
 
-#### Norweian Sensitivity Index (NSI)
+#### Sensitivitetsindex, Indicator Species Index (ISI 2012), Norweian Sensitivity Index (NSI) og Norwegian Quality Index 1 (NQI1)
 
-```{r nsikort, out.width='100%', fig.cap="Norweian Sensitivity Index (NSI)"}
+```{r sensitivitetskort, out.width='100%', fig.cap="Indicator Species Index (ISI 2012), Norweian Sensitivity Index (NSI) og Norwegian Quality Index 1 (NQI1)"}
 
-indexkort(urslitindex_long, "NSI")
-
-```
-
-#### Norwegian Quality Index 1 (NQI1)
-
-```{r nqikort, out.width='100%', fig.cap="Norwegian Quality Index 1 (NQI1)"}
-
-indexkort(urslitindex_long, "NQI1")
+indexkortmulti(urslitindex_long, c("ISI 2012", "NSI", "NQI1"), t = "Sensivitetsindex")
 
 ```
 
 ```{r writedata, message=FALSE, warning=FALSE, include=FALSE, results='hide'}
 #talvur sum skulu skrivast til excelfíl
 if(nrow(aliskipan) == 0) {
-  alara1 <- data.frame(aliskipan = "einki rakstrartøl tøk")
+  alara1 <- data.frame(aliskipan = "eingi rakstrartøl tøk")
   ali_lyklatol <- tol1
 }
 
 dfwrite <- list(alara1, ali_lyklatol, urslitbotnl, urslitkemi, urslitsens1, kemimean, sensmean, urslitdjoreinkul,
-                urslitdjoraliv)
+                urslitdjoraliv, yvirlit, urslitindex_long)
 dfname <- c("rakstrartol", "rakstrartol_lyklatol", "urs_botnlysing", "urs_kemi", "urs_sensorisk", "urs_kemi_midal", "urs_sensorisk_midal", "urs_djoreinkul",
-            "urs_djoraliv")
+            "urs_djoraliv", "djoraliv_yvirlit", "djoraliv_index")
 
 dfdata <- tibble(dfwrite, dfname) %>% 
   mutate(path = paste("data_output/", alioki, "-", dfname, ".csv", sep = ""))

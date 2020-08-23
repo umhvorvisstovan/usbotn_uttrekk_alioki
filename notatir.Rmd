@@ -56,4 +56,4 @@ Arbeitt verður á nýggjari "menningar" branch á Github, tá arbeiði er góð
 + rokna index virðir
   - dupultkannað við python roknaði indeksir
 + plotta index
-  - kort
+  - kort býtt í diversitets og sensitivitets index 
