@@ -14,33 +14,17 @@ knitr::opts_chunk$set(echo = TRUE)
 Arbeitt verður á nýggjari "menningar" branch á Github, tá arbeiði er góðkent av Umhvørvisstovuni verða nýggja og gamla branch'inar samantvunnar. Hetta merkir at øll arbeiðsmannagongdin verður dokumentera og goymd til evt. seinni nýtslu.
 
 ## Spurningar (tað eru eisini nakrir í TODO listanum)
-
-+ talvurnar
-  - hvussu nógvar kanningar skulu verða í listanum? - síðsta kanning, men um talan kann gerðast interactiv er betri!
-  - skulu djór, sum eru á svartalistanum vísast? - JA, men skulu bólkast fyri seg
-
-+ Tal av djórasløgum
-  - hvat telur við? hvussu langt upp í trænum??
-
-+ Sensitivitets virðir
-  - tá man nýtir "ancestor" til at matcha við, skal man so eisini uppdaterað tal av djórasløgum so tað samsvarar við matchaða listan???
+  
++ hvussu skal "mean" og "sum" dataviðgerðast
+  - eru hetta tveir "nýggir" grabbar, tvs. mean og sum verður tikið per. aphia_id og síðani verður dátuviðgerðin framd
 
 ## TODO:
 
-+ plotta positiónir
-  - bara fyri aliøki? ella fyri fjørðin?
-      + trupulleikar við gomlum aliøkum
-      + trupulleikar tá alifirðirnir eru defineraðir tvørtur um oyggjar
-      + sumi aliøka hava felags samanberingarstøð
-      
-  - ynski:
-      + alifjørðin fyrst
-      + so fokus á  aliøki
-    
-  - interactivt?
++ interactiar talvur, kanska....
+
++ ISI 2012 - nýtt S -> skal passa við tað sum er matcha við norska listan
   
 + plotta index
-  - scatterplots
   - distance til ringsýni ?
 
 
@@ -49,11 +33,20 @@ Arbeitt verður á nýggjari "menningar" branch á Github, tá arbeiði er góð
 + hevur Umhvørvisstovan tikið avgerð um open source?
     - vátta at tað verður open source
 + talva við yvirliti (metadata) av djóralívssýnunum
++ talva við seinastu kanning, per. aphia_id
++ talva við seinastu kanning, per. class
++ talva við seinastu kanning, einfaldari uppgerð
++ talva við seinastu kanning, top 5 species
 + inkorpurerað svartalistan - norsk vegleiðing 2016
 + norsku sensitivitets virðini -- leggjast inn sum csv ella út á databasan?? - Databasan er betri.
     - liggur sum csv fílur í projectinum
 + skriva funktiónir til index
 + rokna index virðir
   - dupultkannað við python roknaði indeksir
++ talva við seinastu kannin, indexirðir
 + plotta index
+  - tíðarseria
   - kort býtt í diversitets og sensitivitets index 
++ plotta positiónir
+  - alifjørðin fyrst
+  - so fokus á  aliøki

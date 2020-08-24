@@ -1721,7 +1721,7 @@ djoralivfjord <- bakgrundskort_simp +
   scale_color_discrete(name = "Sýnistøku ár") +
   scale_shape_discrete(name = "Støðslag") +
   guides(col = guide_legend(override.aes = list(shape = 15, size = 3)))+
-  ggtitle(paste0("Djóralívssýnini á alifjørði ", alifjord_nrr, "øll árini")) +
+  ggtitle(paste0("Djóralívssýnini á alifjørði ", alifjord_nrr, " - øll árini")) +
   theme_void() +
   skrift + 
   bakgrundbla
@@ -1935,7 +1935,6 @@ djoryvirlit_seinastakanning %>%
 
 ```
 
-
 ```{r talvaclasssum}
 djorsumclass <- djor %>%
   filter(!grabba_nr_nytt %in% c("sum", "mean")) %>% 
@@ -1951,7 +1950,7 @@ djorsam <- djor %>%
   group_by(botn_id, class, grabba_nr_nytt) %>%
   summarise(tal = sum(tal, na.rm = TRUE)) %>%
   ungroup() %>% 
-  mutate(grabba_nr_nytt = factor(grabba_nr_nytt, ordered = TRUE)) %>% 
+  arrange(grabba_nr_nytt) %>% 
   pivot_wider(id_cols = c(botn_id, class), names_from = grabba_nr_nytt, values_from = tal) %>%
   left_join(djorsumclass) %>%
   arrange(botn_id, class)
@@ -1970,6 +1969,80 @@ djorsam_seinastakanning %>%
 
 ```
 
+```{r einfolduppgerd}
+
+einfoldsum <- djor %>% 
+  filter(!grabba_nr_nytt %in% c("sum", "mean")) %>% 
+  group_by(botn_id, grabba_nr_nytt) %>%
+  summarise(tal = sum(tal, na.rm = TRUE)) %>%
+  ungroup() %>% 
+  group_by(botn_id) %>% 
+  mutate(mean = mean(tal, na.rm = TRUE),
+         sum = sum(tal, na.rm = TRUE))
+
+einfold <- djor %>% 
+  group_by(djorliv_id) %>% 
+  mutate(N = sum(tal, na.rm = TRUE),
+         S = n()) %>% 
+  ungroup() %>% 
+  mutate(N_div_S = N/S,
+         N_per_m2 = N/grabbavidd_m2.x)
+
+einfoldtalva <- einfold %>% 
+  distinct(botn_id, grabba_nr_nytt, S, N, N_div_S, N_per_m2) %>% 
+  rename(`tal av djórasløgum (S)` = S,
+         `tal av djórum (N)` = N,
+         `N/S` = N_div_S,
+         `tal av djórum per. m2` = N_per_m2) %>% 
+  pivot_longer(cols = c(-botn_id, -grabba_nr_nytt), names_to = "variable", values_to = "value") %>% 
+  mutate(value = round(value, 2)) %>% 
+  pivot_wider(names_from = grabba_nr_nytt, values_from = value)
+
+einfoldtalva_seinastakanning <- einfoldtalva %>% 
+  filter(botn_id %in% djoryvirlit_seinastakanning$botn_id) %>% 
+  arrange(botn_id)
+
+einfoldtalva_seinastakanning %>% 
+  select(-botn_id) %>% 
+  knitr::kable(caption = "Einføld uppgerð", booktabs = T, align = c("l", "r", "r", "r", "r")) %>%
+  kable_styling(bootstrap_options = c("condensed"), 
+                full_width = F, font_size = 12) %>%
+  pack_rows(index = table(fct_inorder(einfoldtalva_seinastakanning$botn_id))) %>%
+  kable_styling(latex_options = c("hold_position"))
+```
+
+```{r dominerandidjor}
+
+perc <- einfold %>% 
+  mutate(percent = round(tal/N*100, 1)) %>% 
+  group_by(djorliv_id) %>% 
+  arrange(desc(percent))
+
+perc5 <- perc %>% 
+  top_n(5) %>% 
+  ungroup() %>% 
+  distinct(botn_id, scientific_name, year)
+
+perc <- perc %>% 
+  filter(scientific_name %in% perc5$scientific_name) %>%
+  arrange(grabba_nr_nytt) %>% 
+  pivot_wider(id_cols = c(botn_id, scientific_name), names_from = grabba_nr_nytt, values_from = percent) %>% 
+  arrange(botn_id)
+  
+
+perc_seinastakanning <- perc %>% 
+  filter(botn_id %in% djoryvirlit_seinastakanning$botn_id) %>% 
+  arrange(botn_id, desc(sum))
+
+perc_seinastakanning %>% 
+  select(-botn_id) %>% 
+  knitr::kable(caption = "Dominerandi djórasløg (%)", booktabs = T, align = c("l", "r", "r", "r", "r")) %>%
+  kable_styling(bootstrap_options = c("condensed"), 
+                full_width = F, font_size = 12) %>%
+  pack_rows(index = table(fct_inorder(perc_seinastakanning$botn_id))) %>%
+  kable_styling(latex_options = c("hold_position"))
+
+```
 
 
 ```{r idexfunctions}
@@ -2299,10 +2372,16 @@ indextime <- urslitindex_long %>%
   guides(col = guide_legend(override.aes = list(shape = 15, size = 3)))+
   guides(shape = guide_legend(override.aes = list(size = 2))) +
   ggtitle(paste(alioki, "- Tíðarseria av indexvirðunum á djóralívskanningunum")) +
-  theme(axis.title = element_blank(),
-        axis.text.x = element_text(angle = 35, hjust = 1),
-        legend.position = "right")+
-  facet_wrap(index~., scales = "free_y")
+  facet_wrap(index~., scales = "free_y") +
+  theme(axis.text.x = element_text(angle = 35, hjust = 1),
+                axis.title = element_blank(),
+                legend.title = element_text(size = 9, face = "bold"),
+                strip.text.y = element_text(size = 7),
+                strip.text.x = element_text(size = 7),
+                legend.text = element_text(size = 8),
+                legend.key.size = unit(0.8, 'lines'),
+                title = element_text(10))
+  
 indextime
 ```
 
