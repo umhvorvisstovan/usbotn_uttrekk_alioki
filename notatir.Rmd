@@ -15,14 +15,11 @@ Arbeitt verður á nýggjari "menningar" branch á Github, tá arbeiði er góð
 
 ## Spurningar (tað eru eisini nakrir í TODO listanum)
   
-+ hvussu skal "mean" og "sum" dataviðgerðast
-  - eru hetta tveir "nýggir" grabbar, tvs. mean og sum verður tikið per. aphia_id og síðani verður dátuviðgerðin framd
 
 ## TODO:
 
-+ talvan einføld uppgerð hevur ein feil tá einki er upptalt, sigur at S = 1 .... ??...
-
-+ interactiar talvur, kanska....
++ interactivar talvur, kanska....
+    - talva index - vísitøl er nú interactive
 
 + ISI 2012 - nýtt S -> skal passa við tað sum er matcha við norska listan
   
@@ -45,7 +42,7 @@ Arbeitt verður á nýggjari "menningar" branch á Github, tá arbeiði er góð
 + skriva funktiónir til index
 + rokna index virðir
   - dupultkannað við python roknaði indeksir
-+ talva við seinastu kannin, indexirðir
++ talva við seinastu kanning, indexvirðir + interactive option við øllum árunum
 + plotta index
   - tíðarseria
   - kort býtt í diversitets og sensitivitets index 

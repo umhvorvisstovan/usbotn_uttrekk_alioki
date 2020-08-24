@@ -2,14 +2,19 @@
 
 
 #her skrivar tú hvat fyri aliøki tú skal hyggja at
-alioki <- "A89"
+alioki <- "A11"
 
 #her skrivar tú hvussu nógvar útsetur tú skal hyggja at
 utsetur <- 3
 
-#her skrivar tú nær tú ynskir kemiskar kanningar vístar frá í síðstu plottinum
+#her skrivar tú frá hvørjum ári tú ynskir kemiskarkanningar vístar frá í síðstu plottinum
 kemi <- 2014
 
+#her skrivar tú frá hvørjum ári tú ynskir djóralívskanningar vístar á plottunum
+djorlivyear <- 2006
+
+#her skrivar tú (TRUE/FALSE) um tú ynskir eina interactiva talvu við útroknaðu indexunum
+djorlivreactivetable <- TRUE
 
 #her skrivar tú um tú ynskir úttrekkið sum, "pdf" ella "html"
 type <- "html"
@@ -53,7 +58,9 @@ rmarkdown::render("RapportUppsamlingAlioki.Rmd", params = list(
   user = Sys.getenv("USER"),
   loyniord = Sys.getenv("PASSWORD"),
   kemi = kemi,
-  lev = utsetur
+  lev = utsetur,
+  djorlivyear = djorlivyear,
+  djorlivreactivetable = djorlivreactivetable
 ),
 output_format = out,
 output_file = paste("rapportir/",alioki, "-", format(Sys.Date(), "%y%m%d"), ".", type, sep = ""), envir = new.env()
