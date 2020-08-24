@@ -99,7 +99,7 @@ if (is_html_output() == TRUE){
 
 # hjálpari til skript menning, set developing til TRUE
 # OBS! minst til at seta hetta aftur til FALSE!!
-developing <- FALSE
+developing <- TRUE
 
 if(developing == TRUE){
   con <- dbConnect(odbc::odbc(), Driver = "PostgreSQL Unicode(x64)", 
@@ -109,7 +109,7 @@ if(developing == TRUE){
                    PWD = Sys.getenv("PASSWORD"),
                    Port = 5432,
                    encoding = "windows-1252")
-  alioki <- "A89"
+  alioki <- "A05"
   lev <- 3
   utsetur <- 3
   kemi <- 2014
@@ -1982,8 +1982,8 @@ einfoldsum <- djor %>%
 
 einfold <- djor %>% 
   group_by(djorliv_id) %>% 
-  mutate(N = sum(tal, na.rm = TRUE),
-         S = n()) %>% 
+  mutate(S = n(),
+         N = sum(tal, na.rm = TRUE)) %>% 
   ungroup() %>% 
   mutate(N_div_S = N/S,
          N_per_m2 = N/grabbavidd_m2.x)
@@ -2293,7 +2293,7 @@ urslitindex <- urslitdjoraliv_sensi %>%
 
 #longform
 index_keep <- c("S", "N", "SN", "H", "J", "ES100", "NSI", "ISI2012", "AMBI", "NQI1")
-index_keep_labels <- c("S", "N", "SN", "H'", "J'", "ES100", "ISI 2012", "NSI", "AMBI", "NQI1")
+index_keep_labels <- c("S", "N", "SN", "H'", "J'", "ES100", "NSI", "ISI 2012", "AMBI", "NQI1")
 index_keep_navn <- c("\\bS\\b" = "Tal av djórasløgum",
                      "\\bN\\b" = "Tal av djórum",
                      "SN" = "SN",
