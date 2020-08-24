@@ -20,6 +20,8 @@ Arbeitt verður á nýggjari "menningar" branch á Github, tá arbeiði er góð
 
 ## TODO:
 
++ talvan einføld uppgerð hevur ein feil tá einki er upptalt, sigur at S = 1 .... ??...
+
 + interactiar talvur, kanska....
 
 + ISI 2012 - nýtt S -> skal passa við tað sum er matcha við norska listan
