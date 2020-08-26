@@ -25,6 +25,8 @@ Arbeitt verður á nýggjari "menningar" branch á Github, tá arbeiði er góð
   
 + plotta index
   - distance til ringsýni ?
+  
++ set git commit hash ella sha í rapportina!
 
 
 ## DONE:

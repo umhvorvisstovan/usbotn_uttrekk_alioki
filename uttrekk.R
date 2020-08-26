@@ -2,7 +2,7 @@
 
 
 #her skrivar tú hvat fyri aliøki tú skal hyggja at
-alioki <- "A11"
+alioki <- "A52"
 
 #her skrivar tú hvussu nógvar útsetur tú skal hyggja at
 utsetur <- 3
@@ -11,7 +11,7 @@ utsetur <- 3
 kemi <- 2014
 
 #her skrivar tú frá hvørjum ári tú ynskir djóralívskanningar vístar á plottunum
-djorlivyear <- 2006
+djorlivyear <- 1990
 
 #her skrivar tú (TRUE/FALSE) um tú ynskir eina interactiva talvu við útroknaðu indexunum
 djorlivreactivetable <- TRUE

@@ -35,3 +35,5 @@ data/UrAliskipan/*
 !*/mastersheetAliskipan!.xlsx
 # ignore all html files
 *.html
+# ignore all files named test.*
+test.*
