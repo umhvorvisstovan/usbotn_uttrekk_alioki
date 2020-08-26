@@ -45,7 +45,8 @@ if(dir.exists("rapportir") == FALSE) {dir.create("rapportir")}
 if(dir.exists("data_output") == FALSE) {dir.create("data_output")}
 
 #packages required
-uttrekk_pack <- c("tidyverse", "lubridate", "shiny", "odbc", "knitr", "kableExtra", "ggforce", "ggpubr", "ggrepel")
+uttrekk_pack <- c("tidyverse", "lubridate", "shiny", "odbc", "DBI", "knitr", "kableExtra",
+                  "ggforce", "ggpubr", "ggrepel", "sf", "reactable", "rmarkdown", "bookdown")
 mangla <- uttrekk_pack[!uttrekk_pack %in% installed.packages()[,"Package"]]
 if(!is.null(nrow(mangla))) {stop(paste("\n \n Tú manglar at installera package/s:", mangla))}
 

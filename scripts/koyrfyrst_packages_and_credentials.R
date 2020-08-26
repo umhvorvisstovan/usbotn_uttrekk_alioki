@@ -4,9 +4,10 @@
 
 #packages required
 uttrekk_pack <- c("tidyverse", "lubridate", "shiny", "odbc", "DBI", "knitr", "kableExtra",
-                  "ggforce", "ggpubr", "ggrepel", "usethis", "sf", "reactable")
+                  "ggforce", "ggpubr", "ggrepel", "usethis", "sf", "reactable", "rmarkdown",
+                  "bookdown")
 mangla <- uttrekk_pack[!uttrekk_pack %in% installed.packages()[,"Package"]]
-install.packages(mangla)
+if(length(mangla)>0){install.packages(mangla)}
 
 # set up localan .Renviron fíl við databasu upplýsingum og brúkara upplýsingum
 usethis::edit_r_environ("project")
@@ -17,3 +18,4 @@ SERVER=navn_ella_ip_adressa_á_servaranum
 DATABASE=navn_á_dátugrunni
 USER=brúkari
 PASSWORD=loyniorð
+### --------
