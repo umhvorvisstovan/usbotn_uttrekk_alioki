@@ -1,6 +1,7 @@
 # History files
 .Rhistory
 .Rapp.history
+.Renviron
 # Session Data files
 .RData
 # Example code in package build process
@@ -30,6 +31,9 @@ data_output
 # ignore all xls and xlsx files uttan mastersheet aliskipan
 *.xls
 *.xlsx
-\!mastersheetAliskipan!.xlsx
+data/UrAliskipan/*
+!*/mastersheetAliskipan!.xlsx
 # ignore all html files
 *.html
+# ignore all files named test.*
+test.*

@@ -2,14 +2,19 @@
 
 
 #her skrivar tú hvat fyri aliøki tú skal hyggja at
-alioki <- "A21"
+alioki <- "A52"
 
 #her skrivar tú hvussu nógvar útsetur tú skal hyggja at
 utsetur <- 3
 
-#her skrivar tú nær tú ynskir kemiskar kanningar vístar frá í síðstu plottinum
+#her skrivar tú frá hvørjum ári tú ynskir kemiskarkanningar vístar frá í síðstu plottinum
 kemi <- 2014
 
+#her skrivar tú frá hvørjum ári tú ynskir djóralívskanningar vístar á plottunum
+djorlivyear <- 1990
+
+#her skrivar tú (TRUE/FALSE) um tú ynskir eina interactiva talvu við útroknaðu indexunum
+djorlivreactivetable <- TRUE
 
 #her skrivar tú um tú ynskir úttrekkið sum, "pdf" ella "html"
 type <- "html"
@@ -40,18 +45,22 @@ if(dir.exists("rapportir") == FALSE) {dir.create("rapportir")}
 if(dir.exists("data_output") == FALSE) {dir.create("data_output")}
 
 #packages required
-uttrekk_pack <- c("tidyverse", "lubridate", "shiny", "odbc", "knitr", "kableExtra", "ggforce")
+uttrekk_pack <- c("tidyverse", "lubridate", "shiny", "odbc", "knitr", "kableExtra", "ggforce", "ggpubr", "ggrepel")
 mangla <- uttrekk_pack[!uttrekk_pack %in% installed.packages()[,"Package"]]
 if(!is.null(nrow(mangla))) {stop(paste("\n \n Tú manglar at installera package/s:", mangla))}
 
+
+
 rmarkdown::render("RapportUppsamlingAlioki.Rmd", params = list(
   alioki = alioki,
-  server = rstudioapi::showPrompt(title = "Server", message = "Server navn:", default = ""),
-  database = rstudioapi::showPrompt(title = "Database", message = "Database navn:", default = ""),
-  user = rstudioapi::showPrompt("Database username", "username"),
-  loyniord = rstudioapi::askForPassword("Database password"),
+  server = Sys.getenv("SERVER"),
+  database = Sys.getenv("DATABASE"),
+  user = Sys.getenv("USER"),
+  loyniord = Sys.getenv("PASSWORD"),
   kemi = kemi,
-  lev = utsetur
+  lev = utsetur,
+  djorlivyear = djorlivyear,
+  djorlivreactivetable = djorlivreactivetable
 ),
 output_format = out,
 output_file = paste("rapportir/",alioki, "-", format(Sys.Date(), "%y%m%d"), ".", type, sep = ""), envir = new.env()

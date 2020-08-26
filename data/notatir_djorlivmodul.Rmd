@@ -1,0 +1,53 @@
+---
+title: "notes_djoralivmodul"
+author: "Birgitta"
+date: "19/05/2020"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Github
+
+Arbeitt verður á nýggjari "menningar" branch á Github, tá arbeiði er góðkent av Umhvørvisstovuni verða nýggja og gamla branch'inar samantvunnar. Hetta merkir at øll arbeiðsmannagongdin verður dokumentera og goymd til evt. seinni nýtslu.
+
+## Spurningar (tað eru eisini nakrir í TODO listanum)
+  
+
+## TODO:
+
++ interactivar talvur, kanska....
+    - talva index - vísitøl er nú interactive
+
++ ISI 2012 - nýtt S -> skal passa við tað sum er matcha við norska listan
+  
++ plotta index
+  - distance til ringsýni ?
+  
++ set git commit hash ella sha í rapportina!
+
+
+## DONE:
++ rmd skal kunna koyra uttan rakstrartøl!
++ hevur Umhvørvisstovan tikið avgerð um open source?
+    - vátta at tað verður open source
++ talva við yvirliti (metadata) av djóralívssýnunum
++ talva við seinastu kanning, per. aphia_id
++ talva við seinastu kanning, per. class
++ talva við seinastu kanning, einfaldari uppgerð
++ talva við seinastu kanning, top 5 species
++ inkorpurerað svartalistan - norsk vegleiðing 2016
++ norsku sensitivitets virðini -- leggjast inn sum csv ella út á databasan?? - Databasan er betri.
+    - liggur sum csv fílur í projectinum
++ skriva funktiónir til index
++ rokna index virðir
+  - dupultkannað við python roknaði indeksir
++ talva við seinastu kanning, indexvirðir + interactive option við øllum árunum
++ plotta index
+  - tíðarseria
+  - kort býtt í diversitets og sensitivitets index 
++ plotta positiónir
+  - alifjørðin fyrst
+  - so fokus á  aliøki
