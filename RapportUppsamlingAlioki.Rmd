@@ -2736,3 +2736,18 @@ walk2(dfdata$dfwrite, dfdata$path, write_excel_csv2, na = "")
 
 ```
 
+
+# Github {-}
+
+ * øll r-script liggja á https://github.com/umhvorvisstovan/usbotn_uttrekk_alioki
+
+```{r}
+# um Github repository er clona ístaðin fyri downloada, so ber til at síggja júst hvat fyri commit er brúkt til júst hesu rapportina!
+
+if(dir.exists(".git")){
+  commit <- system("git rev-parse HEAD", intern = TRUE)
+  url <- str_remove(system("git config --get remote.origin.url", intern = TRUE), "\\.git")
+  asis_output(paste0("* r-scriptini til hesa rapport liggja á ", url, "/tree/", commit))
+}
+```
+
