@@ -118,11 +118,11 @@ if(developing == TRUE){
                    PWD = Sys.getenv("PASSWORD"),
                    Port = 5432,
                    encoding = "windows-1252")
-  alioki <- "A63"
+  alioki <- "A11"
   lev <- 3
   utsetur <- 3
   kemi <- 2014
-  djorlivyear <- 1990
+  djorlivyear <- 2014
   djorlivreactivetable <- TRUE
 } else {
   con <- dbConnect(odbc::odbc(), Driver = "PostgreSQL Unicode(x64)", 
@@ -1703,7 +1703,8 @@ if(max(urslitkemi %>% filter(stodslag_id == "RS") %>% .$year)>kemi) {
 
 \newpage
 
-# Djóralívskanningar
+# Djóralívskanningar frá ár `r djorlivyear`
+
 
 ```{r godskukrov}
 # djóralývskanninar "góðskutryggjaðar"
@@ -1743,14 +1744,26 @@ filtrerad_djortalva <- djortalva %>%
 
 ```
 
+```{r}
+# filtrerað djóralívskaningar til djorlivyear
+djoryear <- djortalva %>% 
+  # filtrerað til djorlivyear
+  filter(year >= djorlivyear) %>% 
+  .$year
+
+```
 
 ## Positiónir á djóralívssýnunum
 
 ### Á alifjørði `r alifjord_nrr`
 
 ```{r kortdjorfjordtogether, out.width='100%', fig.cap="Positiónirnar á djóralívssýnunum á alifjørðinum, øll árini"}
+if(max(djoryear)>=djorlivyear) {
+
 dfkort <- djoralivsynifjord %>% 
-  filter(!is.na(year)) 
+  filter(!is.na(year)) %>% 
+  # filtrerað til djorlivyear
+  filter(year >= djorlivyear)
 
 dfk <- dfkort 
 
@@ -1779,14 +1792,21 @@ djoralivfjord <- bakgrundskort_simp +
   bakgrundbla
 
 djoralivfjord
+} else {
+  cat("- eingi úrslit")
+}
 
 ```
 
 ### Á aliøki `r alioki`
 
 ```{r kortdjortfacet, out.width='100%', fig.cap="Positiónirnar á djóralívssýnunum á aliøkinum fyri hvørt ár"}
+if(max(djoryear)>=djorlivyear) {
+
 dfkort <- djoralivsyni %>% 
-  filter(!is.na(year)) 
+  filter(!is.na(year)) %>% 
+  # filtrerað til djorlivyear
+  filter(year >= djorlivyear)
 
 ringar <- ringpos %>% 
   filter(stodslag_id == "RS") %>% 
@@ -1832,10 +1852,18 @@ djoralivfacetalioki <- djoralivalioki +
 
 djoralivfacetalioki
 
+} else {
+  cat("- eingi úrslit")
+}
+
 ```
 
 ```{r kortdjortogether, out.width='100%', fig.cap="Positiónirnar á djóralívskanningunum á aliøkinum, øll árini"}
+if(max(djoryear)>=djorlivyear) {
 djoralivalioki
+} else {
+  cat("- eingi úrslit")
+}
 ```
 
 ## Yvirlit yvir djóralívssýnini
@@ -1857,17 +1885,17 @@ letterfunc <- function(to){
 yvirlit <- djoralivsyni %>% 
   left_join(filtrerad_djortalva, by = "djorliv_id") %>%
   arrange(djorliv_id) %>% 
-  group_by(botn_id) %>% 
+  group_by(botn_id, year) %>% 
   nest() %>% 
   mutate(grabbar = map_dbl(data, nrow), 
          grabba_nr_nytt = map(grabbar, letterfunc)) %>% 
   unnest() %>% 
   ungroup() %>% 
-  select(djorliv_id, botn_id, stodslag_id, grabba_nr, grabba_nr_nytt, grabbavidd_m2.x, upptalt,
+  select(djorliv_id, botn_id, year, stodslag_id, grabba_nr, grabba_nr_nytt, grabbavidd_m2.x, upptalt,
          total_taxon_species, total_individuals_species, perc_individual_species) %>% 
   mutate(godska = if_else(upptalt == "FULT" & grabbavidd_m2.x == 0.100 & 
                             (perc_individual_species >= percentage_species & !is.na(perc_individual_species)), TRUE, FALSE)) %>% 
-  group_by(botn_id) %>% 
+  group_by(botn_id, year) %>% 
   mutate(grabbavidd_mean = mean(grabbavidd_m2.x[upptalt != "EINKI" & !is.na(total_taxon_species)], na.rm = TRUE),
          grabbavidd_sum = sum(grabbavidd_m2.x[upptalt!="EINKI"& !is.na(total_taxon_species)], na.rm = TRUE)) %>% 
   ungroup()
@@ -1886,10 +1914,21 @@ sum_fail <- yvirlit %>%
 godska_false <- yvirlit %>% 
   filter(godska == FALSE) %>% 
   select(djorliv_id) %>% 
-  bind_rows(sum_fail %>% filter(godska == FALSE) %>% select(djorliv_id))
+  bind_rows(sum_fail %>% 
+              filter(godska == FALSE) %>%
+              select(djorliv_id))
+
+# grabbar, ið ikki eru upptaldir
+ikkiupptalt <- yvirlit %>% 
+  filter(upptalt == "EINKI") %>% 
+  select(djorliv_id)
+
+if(max(djoryear)>=djorlivyear) {
 
 yvirlit %>% 
-  select(-grabba_nr, -botn_id, -grabbavidd_mean, -grabbavidd_sum) %>% 
+  # filtrerað til djorlivyear
+  filter(year >= djorlivyear) %>% 
+  select(-grabba_nr, -botn_id, -grabbavidd_mean, -grabbavidd_sum, -year) %>% 
   rename("grabbavídd (m2)" = grabbavidd_m2.x,
          "grabbi (broytt)" = grabba_nr_nytt,
          "støðslag" = stodslag_id,
@@ -1914,6 +1953,9 @@ yvirlit %>%
   column_spec(1, width = "5cm") %>% 
   kable_styling(latex_options = c("hold_position"))
 
+} else {
+  cat("- eingi úrslit")
+}
 
 ```
 
@@ -1964,13 +2006,28 @@ djor <- yvirlit %>%
          class, genus, scientific_name, rankname, aphia_id, tal, 
          year, svartalisti)
 
+all <- djor %>% 
+  #tak grabbar út sum ikki eru upptaldir
+  filter(!(djorliv_id %in% ikkiupptalt$djorliv_id)) %>% 
+  filter(grabba_nr_nytt != "tils" & grabba_nr_nytt != "midal") %>% 
+  group_by(botn_id) %>% 
+  complete(grabba_nr_nytt, nesting(aphia_id, grabbavidd_mean, grabbavidd_sum)) %>% 
+  mutate(tal0 = if_else(is.na(tal), 0, tal)) %>% 
+  arrange(aphia_id, botn_id)
+
+
 djorsums <- djor %>%
+  right_join(all %>% select(botn_id, aphia_id, grabba_nr_nytt, grabbavidd_mean, grabbavidd_sum, tal0)) %>% 
   select(-djorliv_id, -grabba_nr_nytt) %>% 
+  ungroup() %>% 
   group_by(botn_id, aphia_id, grabbavidd_sum, grabbavidd_mean) %>% 
   mutate(tils = sum(tal, na.rm = TRUE),
          tils = if_else(tils == 0, NA_real_, tils),
-         midal = mean(tal, na.rm = TRUE),
-         midal = if_else(is.na(midal), NA_real_, midal))
+         midal = mean(tal0, na.rm = TRUE),
+         midal = if_else(is.na(midal), NA_real_, midal)) %>% 
+  filter(!is.na(tal)) %>% 
+  select(-tal0) %>% 
+  ungroup()
 
 
 # legg sum og mean sum nýggir grabbar aftuart teimum sum longu eru, so at teir verða viðgjørdir sum nýggj sýni
@@ -1984,11 +2041,13 @@ djor <- djor %>%
               mutate(grabbavidd_m2.x = if_else(grabba_nr_nytt == "midal", min(grabbavidd_m2.x), max(grabbavidd_m2.x))) %>% 
               select(-test) %>% 
               ungroup() %>% 
-              distinct_all
+              distinct_all()
   ) %>% 
   mutate(djorliv_id = if_else(is.na(djorliv_id), paste0(botn_id, "-", grabba_nr_nytt), djorliv_id))
 
 rm(djorsums)
+
+if(max(djoryear)>=djorlivyear) {
 
 djoryvirlit <- djor %>% 
   pivot_wider(id_cols = c(botn_id, class, genus, scientific_name, rankname, aphia_id, svartalisti, year),
@@ -2014,6 +2073,10 @@ djoryvirlit_seinastakanning %>%
   pack_rows(index = table(fct_inorder(djoryvirlit_seinastakanning$botn_id_svartalisti))) %>% 
   kable_styling(latex_options = c("hold_position"))
 
+} else {
+  cat("- eingi úrslit")
+}
+
 ```
 
 ```{r talvaclasssum}
@@ -2031,6 +2094,8 @@ djorsam_seinastakanning <- djorsam %>%
   filter(botn_id %in% djoryvirlit_seinastakanning$botn_id) %>% 
   arrange(botn_id, class)
 
+if(max(djoryear)>=djorlivyear) {
+
 djorsam_seinastakanning %>% 
   rename("miðal" = midal,
          "tils." = tils) %>% 
@@ -2040,6 +2105,10 @@ djorsam_seinastakanning %>%
                 full_width = F, font_size = 12) %>%
   pack_rows(index = table(fct_inorder(djorsam_seinastakanning$botn_id))) %>%
   kable_styling(latex_options = c("hold_position"))
+
+} else {
+  cat("- eingi úrslit")
+}
 
 ```
 
@@ -2068,6 +2137,8 @@ einfoldtalva_seinastakanning <- einfoldtalva %>%
   filter(botn_id %in% djoryvirlit_seinastakanning$botn_id) %>% 
   arrange(botn_id)
 
+if(max(djoryear)>=djorlivyear) {
+
 einfoldtalva_seinastakanning %>% 
   select(-botn_id) %>% 
   rename("miðal" = midal,
@@ -2077,6 +2148,10 @@ einfoldtalva_seinastakanning %>%
                 full_width = F, font_size = 12) %>%
   pack_rows(index = table(fct_inorder(einfoldtalva_seinastakanning$botn_id))) %>%
   kable_styling(latex_options = c("hold_position"))
+  
+} else {
+  cat("- eingi úrslit")
+}
 ```
 
 ```{r dominerandidjor}
@@ -2105,6 +2180,8 @@ perc_seinastakanning <- perc %>%
   filter(botn_id %in% djoryvirlit_seinastakanning$botn_id) %>% 
   arrange(botn_id, desc(tils))
 
+if(max(djoryear)>=djorlivyear) {
+
 perc_seinastakanning %>% 
   rename("miðal" = midal,
          "tils." = tils) %>% 
@@ -2114,6 +2191,10 @@ perc_seinastakanning %>%
                 full_width = F, font_size = 12) %>%
   pack_rows(index = table(fct_inorder(perc_seinastakanning$botn_id))) %>%
   kable_styling(latex_options = c("hold_position"))
+
+} else {
+  cat("- eingi úrslit")
+}
 
 ```
 
@@ -2438,6 +2519,8 @@ stodafunc <- function(value){
   }
 }
 
+if(max(djoryear)>=djorlivyear) {
+
 index_talva <- urslitindex_long %>%
   filter(index %in% index_einfold) %>%
   arrange(grabba_nr_nytt) %>% 
@@ -2476,6 +2559,11 @@ index_seinastakanning %>%
   pack_rows(index = table(fct_inorder(index_seinastakanning$botn_id))) %>% 
   kable_styling(latex_options = c("hold_position")) %>% 
   footnote(symbol = "í síðstu kolonnu til høgru sæst støðan á samanlagda grabbanum (sum). Grái litur = líkur ikki góðskukrøv")
+
+} else {
+  cat("- eingi úrslit")
+}
+
 ```
 
 ```{r talaindexreactivetitle, eval=djorlivreactivetable}
@@ -2486,6 +2574,8 @@ asis_output("### Indexir - Vísitøl, fyri øll árini\\n")
 
 
 ```{r talvaindexreactive, eval=djorlivreactivetable}
+if(max(djoryear)>=djorlivyear) {
+
 library(reactable)
 index_talva %>% 
   rename("miðal" = midal,
@@ -2493,6 +2583,7 @@ index_talva %>%
   left_join(djor %>% distinct(botn_id, year)) %>% 
   relocate(year, .after = botn_id) %>% 
   arrange(year) %>% 
+  filter(year >= djorlivyear) %>%
   reactable(sortable = FALSE,
             defaultPageSize = 20,
             pageSizeOptions = c(10, 20, 50, 100),
@@ -2523,10 +2614,11 @@ index_talva %>%
             )
   )
 
+} else {
+  cat("- eingi úrslit")
+}
+
 ```
-
-
-# Djóralívskanningar frá ár `r djorlivyear`
 
 
 
