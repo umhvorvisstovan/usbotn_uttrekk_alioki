@@ -2047,7 +2047,6 @@ djor <- djor %>%
 
 rm(djorsums)
 
-if(max(djoryear)>=djorlivyear) {
 
 djoryvirlit <- djor %>% 
   pivot_wider(id_cols = c(botn_id, class, genus, scientific_name, rankname, aphia_id, svartalisti, year),
@@ -2057,6 +2056,8 @@ djoryvirlit <- djor %>%
   mutate(svartalistin = if_else(svartalisti == FALSE, "sløg nýtt til index útrokningar",
                                 "sløg á svartalista")) %>% 
   arrange(botn_id, svartalisti, class, scientific_name)
+
+if(max(djoryear)>=djorlivyear) {
 
 djoryvirlit_seinastakanning <- djoryvirlit %>% 
   filter(year == max(year)) %>% 
@@ -2090,11 +2091,11 @@ djorsam <- djor %>%
   pivot_wider(id_cols = c(botn_id, class), names_from = grabba_nr_nytt, values_from = tal) %>%
   arrange(botn_id, class)
 
+if(max(djoryear)>=djorlivyear) {
+
 djorsam_seinastakanning <- djorsam %>% 
   filter(botn_id %in% djoryvirlit_seinastakanning$botn_id) %>% 
   arrange(botn_id, class)
-
-if(max(djoryear)>=djorlivyear) {
 
 djorsam_seinastakanning %>% 
   rename("miðal" = midal,
@@ -2133,11 +2134,12 @@ einfoldtalva <- einfold %>%
   pivot_longer(cols = c(-botn_id, -grabba_nr_nytt), names_to = "variable", values_to = "value") %>%  
   pivot_wider(names_from = grabba_nr_nytt, values_from = value)
 
+if(max(djoryear)>=djorlivyear) {
+
 einfoldtalva_seinastakanning <- einfoldtalva %>% 
   filter(botn_id %in% djoryvirlit_seinastakanning$botn_id) %>% 
   arrange(botn_id)
 
-if(max(djoryear)>=djorlivyear) {
 
 einfoldtalva_seinastakanning %>% 
   select(-botn_id) %>% 
@@ -2175,12 +2177,12 @@ perc <- perc %>%
   top_n(10, wt = tils) %>% 
   ungroup()
 
+if(max(djoryear)>=djorlivyear) {
 
 perc_seinastakanning <- perc %>% 
   filter(botn_id %in% djoryvirlit_seinastakanning$botn_id) %>% 
   arrange(botn_id, desc(tils))
 
-if(max(djoryear)>=djorlivyear) {
 
 perc_seinastakanning %>% 
   rename("miðal" = midal,
@@ -2519,7 +2521,7 @@ stodafunc <- function(value){
   }
 }
 
-if(max(djoryear)>=djorlivyear) {
+
 
 index_talva <- urslitindex_long %>%
   filter(index %in% index_einfold) %>%
@@ -2533,6 +2535,8 @@ index_talva <- urslitindex_long %>%
   mutate_if(is.numeric, round, digits = 3) %>% 
   arrange(botn_id)
 
+if(max(djoryear)>=djorlivyear) {
+  
 index_seinastakanning <- index_talva %>%
   filter(botn_id %in% djoryvirlit_seinastakanning$botn_id)
 
@@ -2846,6 +2850,7 @@ if(nrow(aliskipan) == 0) {
   alara1 <- data.frame(aliskipan = "eingi rakstrartøl tøk")
   ali_lyklatol <- tol1
 }
+
 
 dfwrite <- list(alara1, ali_lyklatol, urslitbotnl, urslitkemi, urslitsens1, 
                 kemimean, sensmean, urslitdjoreinkul,
