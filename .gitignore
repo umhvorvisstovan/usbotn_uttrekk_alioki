@@ -36,3 +36,5 @@ data_output
 *.html
 # ignore all files named test.*
 test.*
+# ignore all pptx files
+*.pptx
