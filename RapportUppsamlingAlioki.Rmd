@@ -643,7 +643,7 @@ DBI::dbDisconnect(con)
 
 # Aliøki og alifjørður
 
-## Aliøki `r alioki` í alifjørði `r alifjord_nrr[[1]]` (`r alifjord_navn[[1]]`)
+## Aliøki `r alioki` á alifjørði `r alifjord_nrr[[1]]` (`r alifjord_navn[[1]]`)
 
 ```{r bakgrundskort, include=FALSE}
 library(sf)
@@ -797,7 +797,7 @@ if(nrow(aliskipan)>0){
 } else {
   tol1 <- data.frame("Útseta" = c("Eingi rakstrartøl tøk"))
 }
-knitr::kable(tol1, caption = "Aling - Lyklatøl rakstri og forsøgn (1)", booktabs = T, align = c("l", "c", "c", "c", "r", "r")) %>% 
+knitr::kable(tol1, caption = "Aling - Lyklatøl frá rakstri og forsøgn (1)", booktabs = T, align = c("l", "c", "c", "c", "r", "r")) %>% 
   kable_styling(bootstrap_options = c("condensed"), full_width = F) %>% 
   kable_styling(latex_options = c("hold_position"))
 
@@ -818,7 +818,7 @@ if(nrow(aliskipan) > 0) {
 } else {
   tol2 <- tol1
 }
-knitr::kable(tol2, caption = "Aling - Lyklatøl rakstri og forsøgn (2)", booktabs = T) %>% 
+knitr::kable(tol2, caption = "Aling - Lyklatøl frá rakstri og forsøgn (2)", booktabs = T) %>% 
   kable_styling(bootstrap_options = c("condensed"), full_width = F) %>% 
   kable_styling(latex_options = c("hold_position"))
 ```
@@ -838,7 +838,7 @@ if(nrow(aliskipan) > 0) {
   tol3 <- tol1
 }
 
-knitr::kable(tol3, caption = "Aling - Lyklatøl rakstri og forsøgn (3)", booktabs = T, align = c("l", "c", "r", "r", "r")) %>% 
+knitr::kable(tol3, caption = "Aling - Lyklatøl frá rakstri og forsøgn (3)", booktabs = T, align = c("l", "c", "r", "r", "r")) %>% 
   kable_styling(bootstrap_options = c("condensed"), full_width = F) %>% 
   kable_styling(latex_options = c("hold_position"))
 ```
@@ -857,7 +857,7 @@ if(nrow(aliskipan) > 0) {
 } else {
   tol4 <- tol1
 }
-knitr::kable(tol4, caption = "Aling - Lyklatøl rakstri og forsøgn (4)", booktabs = T) %>% 
+knitr::kable(tol4, caption = "Aling - Lyklatøl frá rakstri og forsøgn (4)", booktabs = T) %>% 
   kable_styling(bootstrap_options = c("condensed"), full_width = F) %>% 
   kable_styling(latex_options = c("hold_position"))
 ```
@@ -924,7 +924,7 @@ Sí Figure \@ref(fig:alitol).
 
 - **Sýnistøku dato:** Seinasti sýnistøku dagur er vístur.
 
-- **Tal av alieindum:** Tal av alieindum sum eru registreraðar í dátugrunninum *usbotn* fyri tí ávísu kanningina.
+- **Tal av alieindum:** Tal av alieindum sum eru registreraðar í dátugrunninum *usbotn* fyri ta ávísu kanningina.
 
 - **Miðalstøða (sensoriskar):** Miðal av Støða II og Støða III pr. sýnisslag pr. alieind (um fleiri) verður roknað. Síðan verður tann hægsti miðalin (worst case) settur sum miðalstøðan.
 
