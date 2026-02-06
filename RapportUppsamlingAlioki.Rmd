@@ -117,7 +117,7 @@ if(developing == TRUE){
                    UID = Sys.getenv("USER"),
                    PWD = Sys.getenv("PASSWORD"),
                    Port = 5432,
-                   encoding = "windows-1252")
+                   encoding = "UTF-8")
   alioki <- "A11"
   lev <- 3
   utsetur <- 3
@@ -131,7 +131,7 @@ if(developing == TRUE){
                    UID = params$user,
                    PWD = params$loyniord,
                    Port = 5432,
-                   encoding = "windows-1252")
+                   encoding = "UTF-8")
 }
 
 #litir til stødu 1 til 4 av sensorisku kanningunum
@@ -703,7 +703,7 @@ skrift <- theme(axis.text = element_blank(),
                 strip.text.x = element_text(size = 7),
                 legend.text = element_text(size = 8),
                 legend.key.size = unit(0.8, 'lines'),
-                title = element_text(10))
+                title = element_text(size = 10))
 
 alikort <- bakgrundskort +
   geom_sf(data = dyb, aes(colour = depth), inherit.aes = FALSE) +
@@ -2669,7 +2669,7 @@ if(max(djoryear)>=djorlivyear) {
           strip.text.x = element_text(size = 7),
           legend.text = element_text(size = 8),
           legend.key.size = unit(0.8, 'lines'),
-          title = element_text(10))
+          title = element_text(size = 10))
   
   indextime
 } else {
